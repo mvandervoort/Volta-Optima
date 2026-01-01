@@ -22,7 +22,8 @@ COPY . .
 RUN reflex init --template blank
 
 # Bouw de frontend
-RUN reflex export --frontend-only --no-zip
+# RUN reflex export --frontend-only --no-zip
+RUN reflex export --frontend-only --no-zip --loglevel debug
 
 # Start de app
 CMD ["reflex", "run", "--env", "prod"]
