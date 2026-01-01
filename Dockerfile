@@ -1,8 +1,14 @@
 FROM python:3.11-slim
 
+# Voorkom interactieve vragen tijdens installatie
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Installeer systeem dependencies voor Node.js, WeasyPrint en Playwright
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ca-certificates \
+    gnupg \
+    && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-cffi \
     libcairo2 \
@@ -24,7 +30,8 @@ RUN apt-get update && apt-get install -y \
     libgbm1 \
     libasound2 \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
+    && apt-get install -y --no-install-recommends nodejs \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
