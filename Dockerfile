@@ -1,11 +1,12 @@
 # Gebruik Python als basis
 FROM python:3.11-slim
 
-# Installeer Node.js en Curl (nodig voor de Reflex frontend)
+# Installeer de noodzakelijke systeem-pakketten (unzip is de ontbrekende schakel!)
 RUN apt-get update && apt-get install -y \
     curl \
     nodejs \
     npm \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -17,9 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Kopieer de rest van de bestanden
 COPY . .
 
-# INITIALISATIE FIX:
-# We gebruiken --template blank om vragen te voorkomen en zorgen dat 
-# het in een niet-interactieve shell draait.
+# Initialiseer de app (dit zal nu wel lukken omdat unzip aanwezig is)
 RUN reflex init --template blank
 
 # Bouw de frontend
