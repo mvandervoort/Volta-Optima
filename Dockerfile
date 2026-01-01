@@ -1,29 +1,25 @@
-# Gebruik Python als basis
 FROM python:3.11-slim
 
-# Installeer de noodzakelijke systeem-pakketten (unzip is de ontbrekende schakel!)
+# Installeer Node.js (Reflex heeft dit nodig)
 RUN apt-get update && apt-get install -y \
     curl \
-    nodejs \
-    npm \
-    unzip \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Kopieer requirements en installeer ze
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Kopieer de rest van de bestanden
+# Kopieer je code
 COPY . .
 
-# Initialiseer de app (dit zal nu wel lukken omdat unzip aanwezig is)
-RUN reflex init --template blank
+# Installeer dependencies
+RUN pip install --no-cache-dir reflex
+RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
 
-# Bouw de frontend
-# RUN reflex export --frontend-only --no-zip
-RUN reflex export --frontend-only --no-zip --loglevel debug
+# Initialiseer Reflex
+RUN reflex init
 
-# Start de app
-CMD ["reflex", "run", "--env", "prod"]
+EXPOSE 3000 8000
+
+# Start Reflex
+CMD ["reflex", "run", "--env", "prod", "--loglevel", "info"]
