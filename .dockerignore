@@ -1,0 +1,16 @@
+.env
+.git
+.github
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.db
+.venv
+venv
+node_modules
+.web
+.reflex
+*.log
+Dockerfile
+.dockerignore
