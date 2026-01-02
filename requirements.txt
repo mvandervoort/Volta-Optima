@@ -4,7 +4,6 @@ supabase
 numpy
 mulberry
 html2image
-reflex-ag-grid
 reflex
 requests
 python-dotenv
@@ -19,10 +18,8 @@ plotly
 passlib
 openai
 psycopg
-reflex-enterprise
 scikit-learn
 fastapi
 python-docx
 geoalchemy2
 PyGithub
-resend
