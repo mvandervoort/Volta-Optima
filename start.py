@@ -52,12 +52,21 @@ def main():
         
         logger.warning("App draait in development mode - dit is een tijdelijke workaround voor Reflex SSR bug")
         
-        # Gebruik simpelweg reflex run zonder parameters
-        # Reflex leest port uit environment variables
-        cmd = ["reflex", "run"]
+        # Gebruik uvicorn direct om de backend te starten (omzeilt reflex run problemen)
+        # De app module laadt automatisch de reflex app
+        logger.info("Starten van Reflex backend via uvicorn...")
         
-        logger.info(f"Opdracht uitvoeren: {' '.join(cmd)}")
-        subprocess.run(cmd)
+        # Doe de import hier zodat alle env vars al zijn gezet
+        import uvicorn
+        from app.app import app as reflex_app
+        
+        # Start uvicorn direct (geen subprocess)
+        uvicorn.run(
+            "app.app:app.api",
+            host="0.0.0.0",
+            port=port,
+            log_level="info"
+        )
         
     except Exception as e:
         logger.error(f"Fout bij starten app: {e}")
