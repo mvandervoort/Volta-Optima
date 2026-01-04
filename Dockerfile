@@ -74,8 +74,6 @@ RUN reflex init
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/ping || exit 1
 
-# Maak startscript uitvoerbaar
-RUN chmod +x /app/start.py
-
-# Start command via het Python script
-CMD ["python", "/app/start.py"]
+# Start command - direct via reflex CLI met minimale configuratie
+# Gebruik reflex deployment mode die werkt zonder SSR
+CMD ["reflex", "run", "--loglevel", "info"]
