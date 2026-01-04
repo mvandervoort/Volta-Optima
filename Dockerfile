@@ -1,4 +1,5 @@
 # Production Dockerfile for Volta-Optima Reflex app on Railway
+# Updated: 2026-01-04 18:33 - Bewezen Energy App methode geïmplementeerd
 FROM python:3.11-slim
 
 # Install system dependencies

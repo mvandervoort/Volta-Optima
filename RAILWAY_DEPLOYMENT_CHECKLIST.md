@@ -5,16 +5,19 @@
 ### 1. Docker Cache Leegmaken (BELANGRIJK!)
 Railway gebruikt Docker cache. Om er zeker van te zijn dat de nieuwe configuratie wordt gebruikt:
 
-**Optie A: Via Railway Dashboard**
-1. Ga naar je Railway project
-2. Ga naar Settings → General
-3. Klik op "Clear Caches"
-4. Bevestig de actie
-
-**Optie B: Via Herdeployment** 
+**Aanbevolen Aanpak: Force Rebuild**
 1. Commit en push je wijzigingen naar je repository
-2. In Railway Dashboard: klik op "Redeploy" 
-3. Railway zal de cache dan automatisch vernieuwen
+2. In Railway Dashboard: Ga naar je service
+3. Klik in de deployment sectie op de 3 dots (⋮) bij de laatste deployment
+4. Kies "Redeploy" of "Remove" gevolgd door een nieuwe deployment
+5. Railway bouwt alles opnieuw vanaf scratch
+
+**Alternatief: Dockerfile wijziging forceren**
+Als Railway toch cache gebruikt, voeg een dummy comment toe in Dockerfile:
+```dockerfile
+# Updated: 2026-01-04 [huidige tijd]
+```
+Commit en push - Railway detecteert de wijziging en herbouwt alles.
 
 ### 2. Benodigde Environment Variables in Railway
 Zorg dat deze variabelen zijn ingesteld:
