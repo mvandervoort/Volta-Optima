@@ -45,17 +45,21 @@ def main():
         logger.info(f"- No-SSR flag bestand: {flag_path}")
         logger.info(f"- Werkdirectory: {os.getcwd()}")
         
-        # Zet ports in environment voor Reflex
-        os.environ["REFLEX_BACKEND_PORT"] = str(port)
-        os.environ["REFLEX_FRONTEND_PORT"] = str(port)
-        os.environ["REFLEX_BACKEND_HOST"] = "0.0.0.0"
-
-        # Start de Reflex app in development mode met eenvoudiger command
-        # Dit voorkomt de "list index out of range" error
-        cmd = ["reflex", "run", "--backend-host", "0.0.0.0"]
-        
-        logger.info(f"Opdracht uitvoeren: {' '.join(cmd)}")
         logger.warning("App draait in development mode - dit is een tijdelijke workaround voor Reflex SSR bug")
+        
+        # Import de app direct
+        from app.app import app as reflex_app
+        
+        # Start alleen de backend via uvicorn command (omzeilt reflex run problemen)
+        cmd = [
+            "uvicorn",
+            "app.app:app.api",
+            "--host", "0.0.0.0",
+            "--port", str(port),
+            "--log-level", "info"
+        ]
+        
+        logger.info(f"Starten van backend via uvicorn: {' '.join(cmd)}")
         subprocess.run(cmd)
         
     except Exception as e:
