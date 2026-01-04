@@ -20,15 +20,20 @@ logger = logging.getLogger("reflex-railway")
 def main():
     """Start de Reflex applicatie in productie modus met de juiste port configuratie."""
     try:
-        # Haal PORT uit omgevingsvariabele (Railway zet dit automatisch)
-        port = int(os.environ.get("PORT", 8000))
-        logger.info(f"Startend op poort: {port}")
-        
-        # Zet SSR-gerelateerde variabelen
-        os.environ["REFLEX_DISABLE_SSR"] = "1"
-        os.environ["VITE_DISABLE_SSR"] = "1"
-        # Development mode om SSR build problemen te omzeilen
-        os.environ["REFLEX_ENV"] = "dev"
+         # Haal PORT uit omgevingsvariabele (Railway zet dit automatisch)
+         port = int(os.environ.get("PORT", 8000))
+         logger.info(f"Startend op poort: {port}")
+         
+         # Zet SSR-gerelateerde variabelen
+         os.environ["REFLEX_DISABLE_SSR"] = "1"
+         os.environ["VITE_DISABLE_SSR"] = "1"
+         # Development mode om SSR build problemen te omzeilen
+         os.environ["REFLEX_ENV"] = "dev"
+         
+         # Zet ports in environment voor Reflex
+         os.environ["REFLEX_BACKEND_PORT"] = str(port)
+         os.environ["REFLEX_FRONTEND_PORT"] = str(port)
+         os.environ["REFLEX_BACKEND_HOST"] = "0.0.0.0"
         
         # Maak een flag bestand om SSR uit te schakelen (indien directory bestaat)
         flag_path = "/app/.web/node_modules/.no-ssr"
@@ -47,19 +52,11 @@ def main():
         
         logger.warning("App draait in development mode - dit is een tijdelijke workaround voor Reflex SSR bug")
         
-        # Import de app direct
-        from app.app import app as reflex_app
+        # Gebruik simpelweg reflex run zonder parameters
+        # Reflex leest port uit environment variables
+        cmd = ["reflex", "run"]
         
-        # Start backend via Python module uvicorn (niet als executable)
-        cmd = [
-            "python", "-m", "uvicorn",
-            "app.app:app.api",
-            "--host", "0.0.0.0",
-            "--port", str(port),
-            "--log-level", "info"
-        ]
-        
-        logger.info(f"Starten van backend via uvicorn: {' '.join(cmd)}")
+        logger.info(f"Opdracht uitvoeren: {' '.join(cmd)}")
         subprocess.run(cmd)
         
     except Exception as e:
