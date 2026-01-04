@@ -72,27 +72,38 @@ def main():
         logger.info("Starting Volta-Optima Reflex app in production mode...")
         logger.info("SSR settings: REFLEX_DISABLE_SSR=1, NODE_ENV=production")
         
+        # Railway specifieke configuratie voor Node.js
+        os.environ["NODE_OPTIONS"] = "--require=/app/node-globals.js " + os.environ.get("NODE_OPTIONS", "")
+        logger.info(f"NODE_OPTIONS set to: {os.environ.get('NODE_OPTIONS')}")
+        
         # Try multiple approaches for compatibility with different Reflex versions
         try:
             # Approach 1: Use rx.App.start if available (older Reflex versions)
-            logger.info(f"Starting Reflex app with backend_port={port}")
+            logger.info(f"Starting Reflex app with backend_port={port}, frontend_port={port}")
+            # Voeg --no-ssr flag toe
             rx.App.start(
                 app,
                 backend_port=port,
                 frontend_port=port,  # Set both to same port for Railway
                 loglevel="info",
-                env="prod"
+                env="prod",
+                frontend_args=["--no-ssr"]  # Disable SSR explicitly
             )
         except (TypeError, AttributeError) as e:
-            # Approach 2: Try the Reflex CLI approach
-            logger.info(f"First approach failed: {e}, trying CLI approach")
+            # Approach 2: Try the Reflex CLI approach with preload script
+            logger.info(f"First approach failed: {e}, trying CLI approach with preload script")
             # Directly use the environment variables that Reflex will read
             os.environ["REFLEX_BACKEND_PORT"] = str(port)
             os.environ["REFLEX_FRONTEND_PORT"] = str(port)
             
             import subprocess
-            logger.info(f"Running: reflex run --env prod --backend-port {port} --frontend-port {port}")
-            subprocess.run(["reflex", "run", "--env", "prod", "--backend-port", str(port), "--frontend-port", str(port)])
+            
+            # Gebruik het preload script om Node.js globals beschikbaar te maken
+            cmd = ["/app/preload-node.sh", "reflex", "run", "--env", "prod",
+                   "--backend-port", str(port), "--frontend-port", str(port)]
+            
+            logger.info(f"Running command: {' '.join(cmd)}")
+            subprocess.run(cmd)
     except Exception as e:
         logger.error(f"Error starting app: {e}")
         traceback.print_exc()

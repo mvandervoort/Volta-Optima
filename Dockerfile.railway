@@ -13,31 +13,28 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Kopieer requirements eerst (caching optimalisatie)
+# Kopieer belangrijke bestanden eerst voor betere caching
 COPY requirements.txt .
+COPY node-globals.js preload-node.sh reflex.json ./
+RUN chmod +x /app/preload-node.sh
 
 # Installeer Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir reflex
 
-# Nu kopiëren we de code (in productie is er geen volume mount)
+# Nu kopiëren we de rest van de code (in productie is er geen volume mount)
 COPY . .
 
-# Kopieer SSR fix script naar de juiste locatie voor Node.js
-RUN mkdir -p /app/.web/node_modules/fix
-COPY fix_ssr.js /app/.web/node_modules/fix/
+# Initialiseer Reflex in niet-interactieve modus met SSR uitgeschakeld
+ENV NODE_OPTIONS="--require=/app/node-globals.js"
+ENV REFLEX_DISABLE_SSR=1
+ENV VITE_DISABLE_SSR=1
 
-# Initialiseer Reflex in niet-interactieve modus
-RUN reflex init --template blank
+# Gebruik het preload script voor Node.js om globals te laden voor de build
+RUN /app/preload-node.sh reflex init --template blank
 
-# Patch Node.js entry point om SSR fix toe te voegen
-RUN if [ -f /app/.web/node_modules/@react-router/dev/dist/cli/index.js ]; then \
-        sed -i '1s/^/require("..\/..\/..\/fix\/fix_ssr.js");\n/' /app/.web/node_modules/@react-router/dev/dist/cli/index.js; \
-    elif [ -f /app/.web/pages/_app.js ]; then \
-        sed -i '1s/^/require("..\/..\/node_modules\/fix\/fix_ssr.js");\n/' /app/.web/pages/_app.js; \
-    else \
-        echo "Couldn't find the right file to patch for SSR fix"; \
-    fi
+# Forceer gebruik van CSR (Client-Side Rendering) ipv SSR
+RUN touch /app/.web/node_modules/.no-ssr
 
 # Assets directory en CSS bestand aanmaken
 RUN mkdir -p /app/assets/styles && \

@@ -15,7 +15,9 @@ Dit document beschrijft het proces voor het deployen van de Volta-Optima Reflex 
 Zorg ervoor dat je repository de volgende bestanden bevat:
 - `Dockerfile.railway` (hernoem naar `Dockerfile` voor Railway)
 - `railway_start.py` (Python startscript voor robuuste Railway deployment)
-- `fix_ssr.js` (Oplossing voor "document is not defined" fouten in SSR)
+- `node-globals.js` (Globale browser polyfills voor Node.js)
+- `preload-node.sh` (Script om browser globals te laden vóór Node.js modules)
+- `reflex.json` (Configuratie om SSR uit te schakelen)
 - `.env` (gebruik deze NIET in je repository, maar configureer de variabelen in Railway)
 
 ### 2. Project Aanmaken in Railway
@@ -95,9 +97,17 @@ Railway integreert automatisch met GitHub:
 
 ### "document is not defined" of andere browser API fouten
 Deze fouten komen vaak voor bij Server-Side Rendering (SSR) in een Node.js omgeving:
-- Controleer of `fix_ssr.js` correct is geïnstalleerd
-- Controleer de patching in de Dockerfile om te zien of het script correct is geïnjecteerd
-- Stel `REFLEX_DISABLE_SSR=1` in als omgevingsvariabele in Railway
+- **Uitgebreide oplossing**: We gebruiken meerdere technieken om dit probleem op te lossen:
+  1. **Node.js preloading**: `preload-node.sh` script injecteert browser globals vóór modules worden geladen
+  2. **Runtime polyfills**: `node-globals.js` voegt browser API's toe aan de Node.js omgeving
+  3. **Build flags**: `reflex.json` configureert Reflex om SSR uit te schakelen
+  4. **Omgevingsvariabelen**: `REFLEX_DISABLE_SSR=1` en `VITE_DISABLE_SSR=1` worden ingesteld
+  5. **Flag file**: `/app/.web/node_modules/.no-ssr` bestand om SSR te blokkeren
+
+Als het probleem aanhoudt:
+- Controleer de build logs voor meer details
+- Probeer de `NODE_OPTIONS` omgevingsvariabele direct in Railway in te stellen
+- Onderzoek of een specifieke dependency het probleem veroorzaakt
 
 ## Best Practices
 

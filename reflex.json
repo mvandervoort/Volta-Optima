@@ -1,0 +1,15 @@
+{
+  "name": "Volta-Optima",
+  "frontend": {
+    "ssr": false,
+    "build": {
+      "envVars": {
+        "VITE_DISABLE_SSR": "1",
+        "VITE_RSC_BUILD": "false"
+      }
+    },
+    "options": {
+      "disableSsr": true
+    }
+  }
+}
