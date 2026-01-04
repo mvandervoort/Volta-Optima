@@ -52,18 +52,28 @@ def main():
         
         logger.warning("App draait in development mode - dit is een tijdelijke workaround voor Reflex SSR bug")
         
-        # Start Reflex via subprocess (backend + frontend)
-        logger.info("Starten van volledige Reflex app (backend + frontend)...")
+        # Check of .web directory bestaat (frontend al gebouwd)
+        frontend_exists = os.path.exists("/app/.web/_static")
+        logger.info(f"Frontend build bestaat: {frontend_exists}")
         
-        # Gebruik reflex run met expliciete parameters
-        cmd = [
-            "reflex", "run",
-            "--backend-host", "0.0.0.0",
-            "--loglevel", "info"
-        ]
+        if not frontend_exists:
+            logger.warning("Geen gecompileerde frontend gevonden - backend-only mode")
         
-        logger.info(f"Command: {' '.join(cmd)}")
-        subprocess.run(cmd)
+        # Start backend via uvicorn (werkt altijd)
+        logger.info("Starten van Reflex backend via uvicorn...")
+        
+        # Doe de import hier zodat alle env vars al zijn gezet
+        import uvicorn
+        from app.app import app as reflex_app
+        
+        # Start uvicorn direct met de Reflex app
+        # De frontend zal worden geserveerd vanaf /.web/_static indien aanwezig
+        uvicorn.run(
+            reflex_app,
+            host="0.0.0.0",
+            port=port,
+            log_level="info"
+        )
         
     except Exception as e:
         logger.error(f"Fout bij starten app: {e}")
