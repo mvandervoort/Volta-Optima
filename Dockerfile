@@ -67,11 +67,9 @@ ENV REFLEX_DISABLE_SSR=1
 ENV VITE_DISABLE_SSR=1
 ENV VITE_RSC_BUILD=false
 
-# Bouw de Reflex app
-RUN reflex init
-# SSR handmatig uitschakelen
-RUN mkdir -p /app/.web/node_modules/ && \
-    echo "SSR is disabled for Railway deployment" > /app/.web/node_modules/.no-ssr
+# Reflex init zonder production build (skip export)
+# We skippen de frontend build en laten dit aan runtime over
+RUN reflex init --loglevel debug || true
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
