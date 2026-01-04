@@ -4,13 +4,17 @@ FROM python:3.11-slim
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
+    unzip \
     build-essential \
     gnupg \
     wget \
     git \
-    && curl -sL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
+
+# Installeer Node.js 20
+RUN curl -sL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 # Voor WeasyPrint en HTML2Image
 RUN apt-get update && apt-get install -y --no-install-recommends \
