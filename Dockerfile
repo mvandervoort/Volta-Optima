@@ -67,11 +67,9 @@ ENV REFLEX_DISABLE_SSR=1
 ENV VITE_DISABLE_SSR=1
 ENV VITE_RSC_BUILD=false
 
-# Gebruik Node.js preload om browser globals beschikbaar te maken tijdens build
-ENV NODE_OPTIONS="--require=/app/node-globals.js"
-
-# Reflex init met Node.js polyfills
-RUN reflex init
+# Reflex init zonder frontend build (backend-only tijdens init)
+# De frontend wordt bij runtime gebouwd door Reflex
+RUN reflex init --no-frontend || reflex init
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
