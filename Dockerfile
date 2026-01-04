@@ -63,9 +63,11 @@ ENV REFLEX_DISABLE_SSR=1
 ENV VITE_DISABLE_SSR=1
 ENV VITE_RSC_BUILD=false
 
-# Bouw de Reflex app met SSR uitgeschakeld
-RUN reflex init --no-ssr
-RUN echo "SSR is disabled for Railway deployment" > /app/.web/node_modules/.no-ssr
+# Bouw de Reflex app
+RUN reflex init
+# SSR handmatig uitschakelen
+RUN mkdir -p /app/.web/node_modules/ && \
+    echo "SSR is disabled for Railway deployment" > /app/.web/node_modules/.no-ssr
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
