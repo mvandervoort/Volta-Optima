@@ -1,5 +1,5 @@
 # Production Dockerfile for Volta-Optima Reflex app on Railway
-# Updated: 2026-01-04 19:31 - Use rx.App.start() directly (Energy App proven method)
+# Updated: 2026-01-04 19:36 - NODE_OPTIONS BEFORE reflex init + subprocess in start.py
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -54,15 +54,15 @@ ENV REFLEX_DISABLE_SSR=1
 ENV VITE_DISABLE_SSR=1
 ENV NODE_ENV=production
 
-# Initialize Reflex app
+# Use node-globals.js to polyfill browser APIs (set BEFORE init!)
+ENV NODE_OPTIONS="--require=/app/node-globals.js"
+
+# Initialize Reflex app WITH polyfills active
 RUN reflex init
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:$PORT/ || exit 1
-
-# Use node-globals.js to polyfill browser APIs during runtime
-ENV NODE_OPTIONS="--require=/app/node-globals.js"
 
 # Start via start.py
 CMD ["python", "/app/start.py"]

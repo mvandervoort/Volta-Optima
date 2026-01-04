@@ -54,16 +54,14 @@ def main():
         
         logger.info("Starting Reflex app...")
         
-        # CRUCIAL: Use rx.App.start() directly - this bypasses reflex CLI
-        # This is what works in Energy App
-        logger.info(f"Starting Reflex app with backend_port={port}")
-        rx.App.start(
-            app,
-            backend_port=port,
-            frontend_port=port,  # Set both to same port for Railway
-            loglevel="debug",
-            env="prod"
-        )
+        # Start via subprocess (rx.App.start doesn't exist in this version)
+        # NODE_OPTIONS is set in Dockerfile to load polyfills
+        logger.info(f"Starting reflex run with port={port}")
+        logger.info(f"NODE_OPTIONS active: {os.environ.get('NODE_OPTIONS')}")
+        
+        # Use subprocess to run reflex
+        import subprocess
+        subprocess.run(["reflex", "run", "--env", "prod", "--loglevel", "info"])
     except Exception as e:
         logger.error(f"Error starting app: {e}", exc_info=True)
         sys.exit(1)
