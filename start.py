@@ -47,7 +47,7 @@ def main():
             "--env", "prod",
             "--backend-port", str(port),
             "--frontend-port", str(port),
-            "--host", "0.0.0.0"
+            "--backend-host", "0.0.0.0"
         ]
         
         logger.info(f"Opdracht uitvoeren: {' '.join(cmd)}")
