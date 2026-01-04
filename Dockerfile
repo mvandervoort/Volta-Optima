@@ -1,5 +1,5 @@
 # Production Dockerfile for Volta-Optima Reflex app on Railway
-# Updated: 2026-01-04 18:49 - Use uvicorn via start.py (avoids SSR issues)
+# Updated: 2026-01-04 19:00 - Manual npm build + uvicorn for full app serving
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -57,13 +57,15 @@ ENV NODE_ENV=production
 # Initialize Reflex app
 RUN reflex init
 
-# Skip export entirely - it still causes SSR errors
-# Instead, just run the app and let it serve from development build
-# RUN reflex export --frontend-only --no-zip || echo "Export failed, will build at runtime"
+# Build frontend IN PRODUCTION MODE manually (skip SSR)
+# This ensures .web/_static exists for uvicorn to serve
+WORKDIR /app/.web
+RUN npm install && npm run build || echo "Build failed, using dev assets"
+WORKDIR /app
 
-# Healthcheck 
+# Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:$PORT/ || exit 1
 
-# Start command - use start.py which uses uvicorn (avoids reflex run SSR issues)
+# Start via start.py using uvicorn (serves both backend and frontend static files)
 CMD ["python", "/app/start.py"]
