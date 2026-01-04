@@ -1,5 +1,5 @@
 # Production Dockerfile for Volta-Optima Reflex app on Railway
-# Updated: 2026-01-04 18:44 - Skip reflex export, runtime build only
+# Updated: 2026-01-04 18:49 - Use uvicorn via start.py (avoids SSR issues)
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -65,5 +65,5 @@ RUN reflex init
 HEALTHCHECK --interval=30s --timeout=30s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:$PORT/ || exit 1
 
-# Start command - use reflex run directly in prod mode
-CMD ["reflex", "run", "--env", "prod", "--loglevel", "info"]
+# Start command - use start.py which uses uvicorn (avoids reflex run SSR issues)
+CMD ["python", "/app/start.py"]

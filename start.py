@@ -1,81 +1,54 @@
 #!/usr/bin/env python
 """
 Railway deployment entry point for the Volta-Optima Reflex App.
-This script handles proper port configuration and provides detailed logging.
-Based on the proven Energy App deployment approach.
+Uses uvicorn directly to avoid SSR build issues in reflex run/export.
 """
 
 import os
 import sys
 import logging
-import subprocess
 
-# Configure logging first to capture all startup information
+# Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
-logger = logging.getLogger("volta_optima_railway_starter")
-
-# Print environment information for debugging
-logger.info(f"Python version: {sys.version}")
-logger.info(f"Current directory: {os.getcwd()}")
-logger.info(f"Files in current directory: {os.listdir('.')}")
-
-try:
-    import reflex as rx
-    logger.info(f"Reflex imported successfully")
-except ImportError as e:
-    logger.error(f"Failed to import reflex: {e}")
-    sys.exit(1)
-
-try:
-    # Import your app - adjust the import path if needed
-    from app.app import app
-    logger.info("Successfully imported Volta-Optima app")
-except ImportError as e:
-    logger.error(f"Failed to import Volta-Optima app: {e}")
-    logger.error(f"sys.path: {sys.path}")
-    sys.exit(1)
+logger = logging.getLogger("volta-optima-railway")
 
 def main():
-    """Main function to start the Reflex app on Railway."""
+    """Start the Reflex backend"""
     try:
         # Get port from Railway environment
         port = int(os.environ.get("PORT", 8000))
-        logger.info(f"Using PORT: {port}")
+        logger.info(f"Starting on port: {port}")
         
-        # Print useful environment variables
-        env_vars = ["REFLEX_ENV", "PYTHON_VERSION", "NODE_VERSION"]
-        for var in env_vars:
-            logger.info(f"{var}: {os.environ.get(var, 'Not set')}")
-
-        # Configure environment for production
+        # Set environment variables
         os.environ["REFLEX_ENV"] = "production"
+        os.environ["REFLEX_DISABLE_SSR"] = "1"
+        os.environ["VITE_DISABLE_SSR"] = "1"
         
-        logger.info("Starting Reflex app in production mode...")
+        logger.info("Environment configured:")
+        logger.info(f"- REFLEX_ENV: {os.environ.get('REFLEX_ENV')}")
+        logger.info(f"- SSR Disabled: {os.environ.get('REFLEX_DISABLE_SSR')}")
         
-        # Start the application with explicit port configuration
-        # Note: Different versions of Reflex have different API for starting the app
-        # Try the old API first
-        try:
-            logger.info(f"Starting Reflex app with backend_port={port}")
-            rx.App.start(
-                app,
-                backend_port=port,
-                frontend_port=port,  # Set both to same port for Railway
-                loglevel="info",
-                env="prod"
-            )
-        except (TypeError, AttributeError) as e:
-            # If that fails, try the alternative approach
-            logger.info(f"First approach failed: {e}, trying subprocess approach")
-            # Directly use the environment variables that Reflex will read
-            os.environ["REFLEX_BACKEND_PORT"] = str(port)
-            os.environ["REFLEX_FRONTEND_PORT"] = str(port)
-            # Use subprocess to run reflex
-            subprocess.run(["reflex", "run", "--env", "prod", "--backend-port", str(port), "--frontend-port", str(port)])
+        # Import uvicorn and the app
+        logger.info("Importing uvicorn and Reflex app...")
+        import uvicorn
+        from app.app import app as reflex_app
+        
+        logger.info("Starting Reflex backend via uvicorn...")
+        logger.info("Note: This avoids SSR build issues by serving backend only via uvicorn")
+        
+        # Start uvicorn with the Reflex app object
+        # The Reflex app serves its own frontend from .web directory
+        uvicorn.run(
+            reflex_app,
+            host="0.0.0.0",
+            port=port,
+            log_level="info"
+        )
+        
     except Exception as e:
         logger.error(f"Error starting app: {e}", exc_info=True)
         sys.exit(1)
