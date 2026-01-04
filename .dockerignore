@@ -14,7 +14,6 @@ venv/
 ENV/
 
 # Voorkom dat oude deployment bestanden worden meegenomen
-node-globals.js
 preload-node.sh
 fix_ssr.js
 patch_emitter.js
