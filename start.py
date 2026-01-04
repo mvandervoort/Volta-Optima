@@ -52,22 +52,18 @@ def main():
         
         logger.warning("App draait in development mode - dit is een tijdelijke workaround voor Reflex SSR bug")
         
-        # Gebruik uvicorn direct om de backend te starten (omzeilt reflex run problemen)
-        # De app module laadt automatisch de reflex app
-        logger.info("Starten van Reflex backend via uvicorn...")
+        # Start Reflex via subprocess (backend + frontend)
+        logger.info("Starten van volledige Reflex app (backend + frontend)...")
         
-        # Doe de import hier zodat alle env vars al zijn gezet
-        import uvicorn
-        from app.app import app as reflex_app
+        # Gebruik reflex run met expliciete parameters
+        cmd = [
+            "reflex", "run",
+            "--backend-host", "0.0.0.0",
+            "--loglevel", "info"
+        ]
         
-        # Start uvicorn direct (geen subprocess)
-        # Reflex app object is zelf de ASGI app
-        uvicorn.run(
-            reflex_app,
-            host="0.0.0.0",
-            port=port,
-            log_level="info"
-        )
+        logger.info(f"Command: {' '.join(cmd)}")
+        subprocess.run(cmd)
         
     except Exception as e:
         logger.error(f"Fout bij starten app: {e}")
