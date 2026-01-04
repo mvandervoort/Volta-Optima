@@ -61,8 +61,9 @@ def main():
         from app.app import app as reflex_app
         
         # Start uvicorn direct (geen subprocess)
+        # Reflex app object is zelf de ASGI app
         uvicorn.run(
-            "app.app:app.api",
+            reflex_app,
             host="0.0.0.0",
             port=port,
             log_level="info"
