@@ -6,6 +6,11 @@
 // Verzeker dat we de console hebben voor logging
 console.log('[node-globals] Installing Node.js browser API polyfills...');
 
+// Behoud import.meta.url voor modules die het nodig hebben
+if (typeof global.import === 'undefined') {
+  global.import = { meta: { url: 'file://' + __dirname + '/main.js' } };
+}
+
 // Verbeterde document mock met meer functionaliteit
 global.document = {
   createElement: () => ({ 
