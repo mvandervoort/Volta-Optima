@@ -1,5 +1,6 @@
 starlette
 cachetools
+uvicorn
 supabase
 numpy
 mulberry
