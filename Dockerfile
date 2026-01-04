@@ -1,5 +1,5 @@
 # Production Dockerfile for Volta-Optima Reflex app on Railway
-# Updated: 2026-01-04 18:33 - Bewezen Energy App methode geïmplementeerd
+# Updated: 2026-01-04 18:44 - Skip reflex export, runtime build only
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -49,11 +49,17 @@ ENV HOST=0.0.0.0
 # Set production environment
 ENV REFLEX_ENV=prod
 
+# Set environment variables to disable SSR during build
+ENV REFLEX_DISABLE_SSR=1
+ENV VITE_DISABLE_SSR=1
+ENV NODE_ENV=production
+
 # Initialize Reflex app
 RUN reflex init
 
-# Export frontend (this creates production build without SSR issues!)
-RUN reflex export --frontend-only --no-zip || echo "Export failed, will build at runtime"
+# Skip export entirely - it still causes SSR errors
+# Instead, just run the app and let it serve from development build
+# RUN reflex export --frontend-only --no-zip || echo "Export failed, will build at runtime"
 
 # Healthcheck 
 HEALTHCHECK --interval=30s --timeout=30s --start-period=40s --retries=3 \
