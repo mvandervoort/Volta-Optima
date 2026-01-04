@@ -15,8 +15,9 @@ WORKDIR /app
 
 # Kopieer belangrijke bestanden eerst voor betere caching
 COPY requirements.txt .
-COPY node-globals.js preload-node.sh reflex.json ./
+COPY node-globals.js preload-node.sh patch_emitter.js post-install.js reflex.json ./
 RUN chmod +x /app/preload-node.sh
+RUN chmod +x /app/post-install.js
 
 # Installeer Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -35,6 +36,9 @@ RUN /app/preload-node.sh reflex init --template blank
 
 # Forceer gebruik van CSR (Client-Side Rendering) ipv SSR
 RUN touch /app/.web/node_modules/.no-ssr
+
+# Patch de emitter.ts module om document is not defined fouten te voorkomen
+RUN node /app/patch_emitter.js
 
 # Assets directory en CSS bestand aanmaken
 RUN mkdir -p /app/assets/styles && \

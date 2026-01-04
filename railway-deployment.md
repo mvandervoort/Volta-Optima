@@ -17,6 +17,8 @@ Zorg ervoor dat je repository de volgende bestanden bevat:
 - `railway_start.py` (Python startscript voor robuuste Railway deployment)
 - `node-globals.js` (Globale browser polyfills voor Node.js)
 - `preload-node.sh` (Script om browser globals te laden vóór Node.js modules)
+- `patch_emitter.js` (Script om forEach in emitter.ts te patchen)
+- `post-install.js` (Post-install script voor automatische patching)
 - `reflex.json` (Configuratie om SSR uit te schakelen)
 - `.env` (gebruik deze NIET in je repository, maar configureer de variabelen in Railway)
 
@@ -103,11 +105,20 @@ Deze fouten komen vaak voor bij Server-Side Rendering (SSR) in een Node.js omgev
   3. **Build flags**: `reflex.json` configureert Reflex om SSR uit te schakelen
   4. **Omgevingsvariabelen**: `REFLEX_DISABLE_SSR=1` en `VITE_DISABLE_SSR=1` worden ingesteld
   5. **Flag file**: `/app/.web/node_modules/.no-ssr` bestand om SSR te blokkeren
+  6. **Directe patching**: `patch_emitter.js` patcht problematische forEach in emitter.ts
+  7. **Post-install hook**: `post-install.js` zorgt voor automatische patching na npm install
+
+#### Specifieke fix voor emitter.ts
+Als je een "document is not defined" error ziet in emitter.ts op lijn 9, is dat een bekend probleem met de forEach methode. Onze patch:
+1. Vindt het emitter.ts bestand in de node_modules
+2. Patcht unsafe code door te controleren of arrays bestaan voor forEach aanroep
+3. Voegt veilige guards toe rond document.addEventListener aanroepen
+4. Maakt een backup van het originele bestand
 
 Als het probleem aanhoudt:
-- Controleer de build logs voor meer details
+- Controleer de build logs voor specifieke errors
 - Probeer de `NODE_OPTIONS` omgevingsvariabele direct in Railway in te stellen
-- Onderzoek of een specifieke dependency het probleem veroorzaakt
+- Onderzoek of andere modules soortgelijke problemen veroorzaken
 
 ## Best Practices
 
