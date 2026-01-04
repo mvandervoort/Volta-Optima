@@ -61,15 +61,14 @@ ENV PORT=8000
 EXPOSE 8000
 ENV HOST=0.0.0.0
 
-# Forceer productie mode en schakel SSR uit
-ENV REFLEX_ENV=prod
+# Development mode om SSR build problemen te omzeilen
+# Dit is een tijdelijke workaround totdat Reflex's SSR bug is gefixt
+ENV REFLEX_ENV=dev
 ENV REFLEX_DISABLE_SSR=1
 ENV VITE_DISABLE_SSR=1
-ENV VITE_RSC_BUILD=false
 
-# Reflex init zonder frontend build (backend-only tijdens init)
-# De frontend wordt bij runtime gebouwd door Reflex
-RUN reflex init --no-frontend || reflex init
+# Reflex init in development mode (geen production build, omzeilt SSR probleem)
+RUN reflex init
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \

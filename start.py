@@ -27,7 +27,8 @@ def main():
         # Zet SSR-gerelateerde variabelen
         os.environ["REFLEX_DISABLE_SSR"] = "1"
         os.environ["VITE_DISABLE_SSR"] = "1"
-        os.environ["REFLEX_ENV"] = "prod"
+        # Development mode om SSR build problemen te omzeilen
+        os.environ["REFLEX_ENV"] = "dev"
         
         # Maak een flag bestand om SSR uit te schakelen (indien directory bestaat)
         flag_path = "/app/.web/node_modules/.no-ssr"
@@ -44,16 +45,17 @@ def main():
         logger.info(f"- No-SSR flag bestand: {flag_path}")
         logger.info(f"- Werkdirectory: {os.getcwd()}")
 
-        # Start de Reflex app in een expliciet productie modus
+        # Start de Reflex app in development mode (omzeilt SSR build probleem)
         cmd = [
             "reflex", "run",
-            "--env", "prod",
+            "--env", "dev",
             "--backend-port", str(port),
             "--frontend-port", str(port),
             "--backend-host", "0.0.0.0"
         ]
         
         logger.info(f"Opdracht uitvoeren: {' '.join(cmd)}")
+        logger.warning("App draait in development mode - dit is een tijdelijke workaround voor Reflex SSR bug")
         subprocess.run(cmd)
         
     except Exception as e:
