@@ -1,5 +1,5 @@
 # Production Dockerfile for Volta-Optima Reflex app on Railway
-# Updated: 2026-01-04 19:27 - Use reflex run with NODE_OPTIONS polyfills
+# Updated: 2026-01-04 19:31 - Use rx.App.start() directly (Energy App proven method)
 FROM python:3.11-slim
 
 # Install system dependencies

@@ -1,53 +1,71 @@
 #!/usr/bin/env python
 """
 Railway deployment entry point for the Volta-Optima Reflex App.
-Uses reflex run with Node.js polyfills to avoid SSR issues.
+Exact copy of proven Energy App approach.
 """
 
 import os
 import sys
 import logging
-import subprocess
 
-# Configure logging
+# Configure logging first to capture all startup information
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
-logger = logging.getLogger("volta-optima-railway")
+logger = logging.getLogger("railway_starter")
+
+# Print environment information for debugging
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Current directory: {os.getcwd()}")
+logger.info(f"Files in current directory: {os.listdir('.')}")
+
+try:
+    import reflex as rx
+    logger.info(f"Reflex imported successfully")
+except ImportError as e:
+    logger.error(f"Failed to import reflex: {e}")
+    sys.exit(1)
+
+try:
+    # Import your app - adjust the import path if needed
+    from app.app import app
+    logger.info("Successfully imported Volta-Optima app")
+except ImportError as e:
+    logger.error(f"Failed to import Volta-Optima app: {e}")
+    logger.error(f"sys.path: {sys.path}")
+    sys.exit(1)
 
 def main():
-    """Start the Reflex app via reflex run with polyfills active"""
+    """Main function to start the Reflex app on Railway."""
     try:
         # Get port from Railway environment
         port = int(os.environ.get("PORT", 8000))
-        logger.info(f"Starting on port: {port}")
+        logger.info(f"Using PORT: {port}")
         
-        # Set environment variables
+        # Print useful environment variables
+        env_vars = ["REFLEX_ENV", "PYTHON_VERSION", "NODE_VERSION"]
+        for var in env_vars:
+            logger.info(f"{var}: {os.environ.get(var, 'Not set')}")
+
+        # Configure environment
         os.environ["REFLEX_ENV"] = "production"
-        os.environ["REFLEX_DISABLE_SSR"] = "1"
-        os.environ["VITE_DISABLE_SSR"] = "1"
-        os.environ["REFLEX_BACKEND_PORT"] = str(port)
-        os.environ["REFLEX_FRONTEND_PORT"] = str(port)
         
-        logger.info("Environment configured:")
-        logger.info(f"- REFLEX_ENV: production")
-        logger.info(f"- SSR Disabled: 1")
-        logger.info(f"- NODE_OPTIONS: {os.environ.get('NODE_OPTIONS', 'Not set')}")
-        logger.info(f"- Port: {port}")
+        logger.info("Starting Reflex app...")
         
-        # Start reflex run
-        # NODE_OPTIONS is already set in Dockerfile to load node-globals.js
-        logger.info("Starting app via reflex run...")
-        
-        cmd = ["reflex", "run", "--loglevel", "info"]
-        logger.info(f"Command: {' '.join(cmd)}")
-        
-        subprocess.run(cmd)
-        
+        # CRUCIAL: Use rx.App.start() directly - this bypasses reflex CLI
+        # This is what works in Energy App
+        logger.info(f"Starting Reflex app with backend_port={port}")
+        rx.App.start(
+            app,
+            backend_port=port,
+            frontend_port=port,  # Set both to same port for Railway
+            loglevel="debug",
+            env="prod"
+        )
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+        logger.error(f"Error starting app: {e}", exc_info=True)
         sys.exit(1)
 
 if __name__ == "__main__":
