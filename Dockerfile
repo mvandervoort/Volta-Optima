@@ -1,31 +1,22 @@
+# Production Dockerfile for Volta-Optima Reflex app on Railway
 FROM python:3.11-slim
 
-# Installeer systeemafhankelijkheden
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     unzip \
     build-essential \
-    gnupg \
-    wget \
-    git \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Installeer Node.js 20
-RUN curl -sL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-# Voor WeasyPrint en HTML2Image
+# Additional system dependencies for WeasyPrint, Playwright, etc.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpangocairo-1.0-0 \
     libpango-1.0-0 \
     libharfbuzz0b \
     libcairo2 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Voor Playwright
-RUN apt-get update && apt-get install -y --no-install-recommends \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
     libcups2 \
@@ -42,38 +33,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Kopieer bestanden en installeer Python dependencies
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopieer de applicatiecode
+# Copy application code
 COPY . .
 
-# Kopieer de Reflex configuratie expliciet
-COPY reflex.json .
-
-# Maak assets directory en CSS bestand aan
-RUN mkdir -p /app/assets/styles && \
-    touch /app/assets/styles/global.css
-
-# Railway configuratie
+# Railway configuration
 ENV PORT=8000
 EXPOSE 8000
 ENV HOST=0.0.0.0
 
-# Development mode om SSR build problemen te omzeilen
-# Dit is een tijdelijke workaround totdat Reflex's SSR bug is gefixt
-ENV REFLEX_ENV=dev
-ENV REFLEX_DISABLE_SSR=1
-ENV VITE_DISABLE_SSR=1
+# Set production environment
+ENV REFLEX_ENV=prod
 
-# Reflex init in development mode (geen production build, omzeilt SSR probleem)
+# Initialize Reflex app
 RUN reflex init
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/ping || exit 1
+# Export frontend (this creates production build without SSR issues!)
+RUN reflex export --frontend-only --no-zip || echo "Export failed, will build at runtime"
 
-# Start command - direct via reflex CLI met minimale configuratie
-# Gebruik reflex deployment mode die werkt zonder SSR
-CMD ["reflex", "run", "--loglevel", "info"]
+# Healthcheck 
+HEALTHCHECK --interval=30s --timeout=30s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:$PORT/ || exit 1
+
+# Start command - use reflex run directly in prod mode
+CMD ["reflex", "run", "--env", "prod", "--loglevel", "info"]

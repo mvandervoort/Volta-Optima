@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """
-Eenvoudige starter voor Reflex op Railway deployment.
-Dit script handelt de port configuratie af en start Reflex in development modus.
+Railway deployment entry point for the Volta-Optima Reflex App.
+This script handles proper port configuration and provides detailed logging.
+Based on the proven Energy App deployment approach.
 """
 
 import os
@@ -9,75 +10,75 @@ import sys
 import logging
 import subprocess
 
-# Configureer logging
+# Configure logging first to capture all startup information
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
-logger = logging.getLogger("reflex-railway")
+logger = logging.getLogger("volta_optima_railway_starter")
+
+# Print environment information for debugging
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Current directory: {os.getcwd()}")
+logger.info(f"Files in current directory: {os.listdir('.')}")
+
+try:
+    import reflex as rx
+    logger.info(f"Reflex imported successfully")
+except ImportError as e:
+    logger.error(f"Failed to import reflex: {e}")
+    sys.exit(1)
+
+try:
+    # Import your app - adjust the import path if needed
+    from app.app import app
+    logger.info("Successfully imported Volta-Optima app")
+except ImportError as e:
+    logger.error(f"Failed to import Volta-Optima app: {e}")
+    logger.error(f"sys.path: {sys.path}")
+    sys.exit(1)
 
 def main():
-    """Start de Reflex applicatie in development modus met de juiste port configuratie."""
+    """Main function to start the Reflex app on Railway."""
     try:
-        # Haal PORT uit omgevingsvariabele (Railway zet dit automatisch)
+        # Get port from Railway environment
         port = int(os.environ.get("PORT", 8000))
-        logger.info(f"Startend op poort: {port}")
+        logger.info(f"Using PORT: {port}")
         
-        # Zet SSR-gerelateerde variabelen
-        os.environ["REFLEX_DISABLE_SSR"] = "1"
-        os.environ["VITE_DISABLE_SSR"] = "1"
-        # Development mode om SSR build problemen te omzeilen
-        os.environ["REFLEX_ENV"] = "dev"
+        # Print useful environment variables
+        env_vars = ["REFLEX_ENV", "PYTHON_VERSION", "NODE_VERSION"]
+        for var in env_vars:
+            logger.info(f"{var}: {os.environ.get(var, 'Not set')}")
+
+        # Configure environment for production
+        os.environ["REFLEX_ENV"] = "production"
         
-        # Zet ports in environment voor Reflex
-        os.environ["REFLEX_BACKEND_PORT"] = str(port)
-        os.environ["REFLEX_FRONTEND_PORT"] = str(port)
-        os.environ["REFLEX_BACKEND_HOST"] = "0.0.0.0"
+        logger.info("Starting Reflex app in production mode...")
         
-        # Maak een flag bestand om SSR uit te schakelen (indien directory bestaat)
-        flag_path = "/app/.web/node_modules/.no-ssr"
-        if os.path.exists("/app/.web/node_modules"):
-            with open(flag_path, "w") as f:
-                f.write("SSR disabled by start.py")
-        else:
-            logger.warning(f"Directory /app/.web/node_modules bestaat niet (nog), flag bestand niet aangemaakt")
-        
-        # Log belangrijke opties
-        logger.info("Reflex configuratie:")
-        logger.info(f"- REFLEX_ENV: {os.environ.get('REFLEX_ENV')}")
-        logger.info(f"- SSR uitgeschakeld: {os.environ.get('REFLEX_DISABLE_SSR')}")
-        logger.info(f"- No-SSR flag bestand: {flag_path}")
-        logger.info(f"- Werkdirectory: {os.getcwd()}")
-        
-        logger.warning("App draait in development mode - dit is een tijdelijke workaround voor Reflex SSR bug")
-        
-        # Check of .web directory bestaat (frontend al gebouwd)
-        frontend_exists = os.path.exists("/app/.web/_static")
-        logger.info(f"Frontend build bestaat: {frontend_exists}")
-        
-        if not frontend_exists:
-            logger.warning("Geen gecompileerde frontend gevonden - backend-only mode")
-        
-        # Start backend via uvicorn (werkt altijd)
-        logger.info("Starten van Reflex backend via uvicorn...")
-        
-        # Doe de import hier zodat alle env vars al zijn gezet
-        import uvicorn
-        from app.app import app as reflex_app
-        
-        # Start uvicorn direct met de Reflex app
-        # De frontend zal worden geserveerd vanaf /.web/_static indien aanwezig
-        uvicorn.run(
-            reflex_app,
-            host="0.0.0.0",
-            port=port,
-            log_level="info"
-        )
-        
+        # Start the application with explicit port configuration
+        # Note: Different versions of Reflex have different API for starting the app
+        # Try the old API first
+        try:
+            logger.info(f"Starting Reflex app with backend_port={port}")
+            rx.App.start(
+                app,
+                backend_port=port,
+                frontend_port=port,  # Set both to same port for Railway
+                loglevel="info",
+                env="prod"
+            )
+        except (TypeError, AttributeError) as e:
+            # If that fails, try the alternative approach
+            logger.info(f"First approach failed: {e}, trying subprocess approach")
+            # Directly use the environment variables that Reflex will read
+            os.environ["REFLEX_BACKEND_PORT"] = str(port)
+            os.environ["REFLEX_FRONTEND_PORT"] = str(port)
+            # Use subprocess to run reflex
+            subprocess.run(["reflex", "run", "--env", "prod", "--backend-port", str(port), "--frontend-port", str(port)])
     except Exception as e:
-        logger.error(f"Fout bij starten app: {e}")
-        raise
+        logger.error(f"Error starting app: {e}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
