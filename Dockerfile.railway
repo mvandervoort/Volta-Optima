@@ -23,8 +23,21 @@ RUN pip install --no-cache-dir reflex
 # Nu kopiëren we de code (in productie is er geen volume mount)
 COPY . .
 
+# Kopieer SSR fix script naar de juiste locatie voor Node.js
+RUN mkdir -p /app/.web/node_modules/fix
+COPY fix_ssr.js /app/.web/node_modules/fix/
+
 # Initialiseer Reflex in niet-interactieve modus
 RUN reflex init --template blank
+
+# Patch Node.js entry point om SSR fix toe te voegen
+RUN if [ -f /app/.web/node_modules/@react-router/dev/dist/cli/index.js ]; then \
+        sed -i '1s/^/require("..\/..\/..\/fix\/fix_ssr.js");\n/' /app/.web/node_modules/@react-router/dev/dist/cli/index.js; \
+    elif [ -f /app/.web/pages/_app.js ]; then \
+        sed -i '1s/^/require("..\/..\/node_modules\/fix\/fix_ssr.js");\n/' /app/.web/pages/_app.js; \
+    else \
+        echo "Couldn't find the right file to patch for SSR fix"; \
+    fi
 
 # Assets directory en CSS bestand aanmaken
 RUN mkdir -p /app/assets/styles && \

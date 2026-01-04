@@ -59,10 +59,18 @@ def main():
             else:
                 logger.info(f"{var}: {os.environ.get(var, 'Not set')}")
 
-        # Configure environment
+        # Configure environment for production and SSR
         os.environ["REFLEX_ENV"] = "prod"
         
-        logger.info("Starting Volta-Optima Reflex app...")
+        # Disable server-side rendering in Node.js environment
+        # Dit kan helpen met het voorkomen van "document is not defined" errors
+        os.environ["REFLEX_DISABLE_SSR"] = "1"
+        
+        # Extra environment variabelen om browser-specifieke code te voorkomen
+        os.environ["NODE_ENV"] = "production"
+        
+        logger.info("Starting Volta-Optima Reflex app in production mode...")
+        logger.info("SSR settings: REFLEX_DISABLE_SSR=1, NODE_ENV=production")
         
         # Try multiple approaches for compatibility with different Reflex versions
         try:

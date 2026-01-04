@@ -15,6 +15,7 @@ Dit document beschrijft het proces voor het deployen van de Volta-Optima Reflex 
 Zorg ervoor dat je repository de volgende bestanden bevat:
 - `Dockerfile.railway` (hernoem naar `Dockerfile` voor Railway)
 - `railway_start.py` (Python startscript voor robuuste Railway deployment)
+- `fix_ssr.js` (Oplossing voor "document is not defined" fouten in SSR)
 - `.env` (gebruik deze NIET in je repository, maar configureer de variabelen in Railway)
 
 ### 2. Project Aanmaken in Railway
@@ -91,6 +92,12 @@ Railway integreert automatisch met GitHub:
 - Controleer of de backend port correct is geconfigureerd in `railway_start.py`
 - Controleer of de Reflex app correct is geconfigureerd voor productie-gebruik
 - Bekijk de logs in Railway voor specifieke Python exceptions
+
+### "document is not defined" of andere browser API fouten
+Deze fouten komen vaak voor bij Server-Side Rendering (SSR) in een Node.js omgeving:
+- Controleer of `fix_ssr.js` correct is geïnstalleerd
+- Controleer de patching in de Dockerfile om te zien of het script correct is geïnjecteerd
+- Stel `REFLEX_DISABLE_SSR=1` in als omgevingsvariabele in Railway
 
 ## Best Practices
 
