@@ -1,51 +1,36 @@
-# Python
-__pycache__/
+# Development en versiebeheersysteem bestanden
+.git
+.gitignore
+.github
+__pycache__
 *.py[cod]
 *$py.class
 *.so
 .Python
+.env
+.venv
 env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-.env.local
+venv/
+ENV/
 
-# Node.js
-node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
+# Voorkom dat oude deployment bestanden worden meegenomen
+node-globals.js
+preload-node.sh
+fix_ssr.js
+patch_emitter.js
+post-install.js
+*.bak
 
-# Reflex
-.web/
-.reflex/
+# Documentatie
+*.md
+LICENSE
+docs/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+# Tijdelijke bestanden
+.web
+.reflex
+.idea
+.vscode
 
-# OS specific
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Git
-.git/
-.gitignore
+# Complexe Dockerfile varianten
+Dockerfile.railway
