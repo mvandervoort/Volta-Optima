@@ -29,10 +29,13 @@ def main():
         os.environ["VITE_DISABLE_SSR"] = "1"
         os.environ["REFLEX_ENV"] = "prod"
         
-        # Maak een flag bestand om SSR uit te schakelen
+        # Maak een flag bestand om SSR uit te schakelen (indien directory bestaat)
         flag_path = "/app/.web/node_modules/.no-ssr"
-        with open(flag_path, "w") as f:
-            f.write("SSR disabled by start.py")
+        if os.path.exists("/app/.web/node_modules"):
+            with open(flag_path, "w") as f:
+                f.write("SSR disabled by start.py")
+        else:
+            logger.warning(f"Directory /app/.web/node_modules bestaat niet (nog), flag bestand niet aangemaakt")
         
         # Log belangrijke opties
         logger.info("Reflex configuratie:")
