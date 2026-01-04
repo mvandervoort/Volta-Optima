@@ -50,9 +50,9 @@ def main():
         # Import de app direct
         from app.app import app as reflex_app
         
-        # Start alleen de backend via uvicorn command (omzeilt reflex run problemen)
+        # Start backend via Python module uvicorn (niet als executable)
         cmd = [
-            "uvicorn",
+            "python", "-m", "uvicorn",
             "app.app:app.api",
             "--host", "0.0.0.0",
             "--port", str(port),
