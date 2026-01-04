@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 """
 Railway deployment entry point for the Volta-Optima Reflex App.
-Uses uvicorn directly to avoid SSR build issues in reflex run/export.
+Uses reflex run with Node.js polyfills to avoid SSR issues.
 """
 
 import os
 import sys
 import logging
+import subprocess
 
 # Configure logging
 logging.basicConfig(
@@ -17,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger("volta-optima-railway")
 
 def main():
-    """Start the Reflex backend"""
+    """Start the Reflex app via reflex run with polyfills active"""
     try:
         # Get port from Railway environment
         port = int(os.environ.get("PORT", 8000))
@@ -27,30 +28,26 @@ def main():
         os.environ["REFLEX_ENV"] = "production"
         os.environ["REFLEX_DISABLE_SSR"] = "1"
         os.environ["VITE_DISABLE_SSR"] = "1"
+        os.environ["REFLEX_BACKEND_PORT"] = str(port)
+        os.environ["REFLEX_FRONTEND_PORT"] = str(port)
         
         logger.info("Environment configured:")
-        logger.info(f"- REFLEX_ENV: {os.environ.get('REFLEX_ENV')}")
-        logger.info(f"- SSR Disabled: {os.environ.get('REFLEX_DISABLE_SSR')}")
+        logger.info(f"- REFLEX_ENV: production")
+        logger.info(f"- SSR Disabled: 1")
+        logger.info(f"- NODE_OPTIONS: {os.environ.get('NODE_OPTIONS', 'Not set')}")
+        logger.info(f"- Port: {port}")
         
-        # Import uvicorn and the app
-        logger.info("Importing uvicorn and Reflex app...")
-        import uvicorn
-        from app.app import app as reflex_app
+        # Start reflex run
+        # NODE_OPTIONS is already set in Dockerfile to load node-globals.js
+        logger.info("Starting app via reflex run...")
         
-        logger.info("Starting Reflex backend via uvicorn...")
-        logger.info("Note: This avoids SSR build issues by serving backend only via uvicorn")
+        cmd = ["reflex", "run", "--loglevel", "info"]
+        logger.info(f"Command: {' '.join(cmd)}")
         
-        # Start uvicorn with the Reflex app object
-        # The Reflex app serves its own frontend from .web directory
-        uvicorn.run(
-            reflex_app,
-            host="0.0.0.0",
-            port=port,
-            log_level="info"
-        )
+        subprocess.run(cmd)
         
     except Exception as e:
-        logger.error(f"Error starting app: {e}", exc_info=True)
+        logger.error(f"Error: {e}", exc_info=True)
         sys.exit(1)
 
 if __name__ == "__main__":

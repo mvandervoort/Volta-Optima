@@ -1,5 +1,5 @@
 # Production Dockerfile for Volta-Optima Reflex app on Railway
-# Updated: 2026-01-04 19:00 - Manual npm build + uvicorn for full app serving
+# Updated: 2026-01-04 19:27 - Use reflex run with NODE_OPTIONS polyfills
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -57,15 +57,12 @@ ENV NODE_ENV=production
 # Initialize Reflex app
 RUN reflex init
 
-# Build frontend IN PRODUCTION MODE manually (skip SSR)
-# This ensures .web/_static exists for uvicorn to serve
-WORKDIR /app/.web
-RUN npm install && npm run build || echo "Build failed, using dev assets"
-WORKDIR /app
-
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:$PORT/ || exit 1
 
-# Start via start.py using uvicorn (serves both backend and frontend static files)
+# Use node-globals.js to polyfill browser APIs during runtime
+ENV NODE_OPTIONS="--require=/app/node-globals.js"
+
+# Start via start.py
 CMD ["python", "/app/start.py"]
