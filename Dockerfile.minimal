@@ -1,0 +1,36 @@
+# Gebruik het slim Python image zoals gewenst
+FROM python:3.11-slim
+
+# 1. Volledig minimale aanpak voor Node.js
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get update && \
+    apt-get install -y nodejs && \
+    apt-get install -y git unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Kopieer requirements eerst, voor betere layer caching
+COPY requirements.txt .
+
+# Installeer dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir reflex
+
+# Bij ontwikkelomgeving wordt de code gemount via volume
+# We kopiëren dus niet de code in de image
+
+# Initialiseer Reflex (niet-interactief met template 1 - blank app)
+RUN reflex init --template blank
+
+# Maak assets directory en leeg CSS bestand aan om FileNotFoundError te voorkomen
+RUN mkdir -p /app/assets/styles && \
+    touch /app/assets/styles/global.css
+
+# Exposing Reflex ports
+EXPOSE 3000 8000
+
+# Standaard kommando (overridable via docker-compose)
+CMD ["reflex", "run", "--env", "dev", "--loglevel", "debug"]

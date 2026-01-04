@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  reflex-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.minimal
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.web
+    ports:
+      - "3000:3000"  # Frontend
+      - "8000:8000"  # Backend API
+    environment:
+      - REFLEX_DEV_MODE=true
+      # Voeg alle benodigde environment variabelen toe uit .env
+      - ADVICE_LIMIT_LOGGED_IN_MULTIPLIER=${ADVICE_LIMIT_LOGGED_IN_MULTIPLIER}
+      - ADVICE_LIMIT_PER_DAY=${ADVICE_LIMIT_PER_DAY}
+      - ADVICE_LIMIT_TOTAL=${ADVICE_LIMIT_TOTAL}
+      - DIRECTUS_API_KEY=${DIRECTUS_API_KEY}
+      - DIRECTUS_URL=${DIRECTUS_URL}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GOOGLE_ANALYTICS_ID=${GOOGLE_ANALYTICS_ID}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - QUESTDB_PASSWORD=${QUESTDB_PASSWORD}
+      - QUESTDB_URL=${QUESTDB_URL}
+      - QUESTDB_USERNAME=${QUESTDB_USERNAME}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+    command: reflex run --env dev --loglevel debug

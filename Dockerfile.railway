@@ -1,0 +1,48 @@
+# Productie-ready Dockerfile voor Railway deployment
+FROM python:3.11-slim
+
+# Essentiële packages voor railway deployment van Reflex
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    unzip \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Kopieer requirements eerst (caching optimalisatie)
+COPY requirements.txt .
+
+# Installeer Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir reflex
+
+# Nu kopiëren we de code (in productie is er geen volume mount)
+COPY . .
+
+# Initialiseer Reflex in niet-interactieve modus
+RUN reflex init --template blank
+
+# Assets directory en CSS bestand aanmaken
+RUN mkdir -p /app/assets/styles && \
+    touch /app/assets/styles/global.css
+
+# Exposing port (Railway configureert dit automatisch)
+EXPOSE 3000 8000
+
+# Railway health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/ping || exit 1
+
+# In productie gebruiken we het Python startscript dat flexibeler is voor custom commando's
+COPY railway_start.py /app/railway_start.py
+RUN chmod +x /app/railway_start.py
+
+# Productie-modus in Reflex
+ENV REFLEX_ENV=prod
+
+# Railway gebruikt het Python script voor een robuuster startproces
+CMD ["python", "/app/railway_start.py"]
