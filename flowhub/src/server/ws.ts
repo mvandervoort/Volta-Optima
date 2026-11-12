@@ -3,7 +3,19 @@ import type { Database } from "bun:sqlite";
 import { PollEngine } from "./bus/pollEngine";
 import { verifySessionToken } from "./auth";
 
-export type ClientWebSocket = ServerWebSocket<{ url: string; userId?: number }>;
+export type ClientWebSocket = ServerWebSocket<{ url: string; cookie: string; userId?: number }>;
+
+const SESSION_COOKIE = "flowhub_session";
+
+function sessionFromCookie(header: string): string | null {
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) continue;
+    if (part.slice(0, separator).trim() !== SESSION_COOKIE) continue;
+    return part.slice(separator + 1).trim() || null;
+  }
+  return null;
+}
 
 export class WebSocketHub {
   private readonly clients = new Set<ClientWebSocket>();
@@ -14,10 +26,10 @@ export class WebSocketHub {
     private readonly engine: PollEngine,
   ) {}
 
-  private authenticate(url: string): number | null {
+  private authenticate(url: string, cookie: string): number | null {
     try {
       const parsed = new URL(url, "http://localhost");
-      const token = parsed.searchParams.get("token") ?? null;
+      const token = parsed.searchParams.get("token") ?? sessionFromCookie(cookie);
       if (!token) return null;
       return verifySessionToken(token, this.sessionSecret);
     } catch {
@@ -28,7 +40,7 @@ export class WebSocketHub {
   handler() {
     return {
       open: (ws: ClientWebSocket): void => {
-        const userId = this.authenticate(ws.data.url);
+        const userId = this.authenticate(ws.data.url, ws.data.cookie);
         if (userId === null) {
           ws.close(1008, "unauthorized");
           return;

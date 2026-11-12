@@ -61,6 +61,8 @@ async function main(): Promise<void> {
   broadcastState = (devices) => hub.broadcast({ type: "state", devices });
   broadcastConnection = (state) => hub.broadcast({ type: "connection", state });
 
+  await engine.start();
+
   const app = new Hono<{ Variables: AppVariables }>();
 
   app.use("*", async (c, next) => {
@@ -99,7 +101,8 @@ async function main(): Promise<void> {
     fetch(req, srv) {
       const url = new URL(req.url);
       if (url.pathname === "/api/v1/ws") {
-        const upgraded = srv.upgrade(req, { data: { url: req.url } });
+        const cookie = req.headers.get("cookie") ?? "";
+        const upgraded = srv.upgrade(req, { data: { url: req.url, cookie } });
         if (upgraded) return undefined;
         return new Response("websocket_upgrade_failed", { status: 400 });
       }

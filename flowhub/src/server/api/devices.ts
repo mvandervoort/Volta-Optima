@@ -10,7 +10,7 @@ import { z } from "zod";
 
 const setpointSchema = z.object({
   value: z.number().finite(),
-  unit: z.enum(["%", "engineering"]),
+  unit: z.enum(["percent", "engineering"]),
 });
 
 const valveOverrideSchema = z.object({
@@ -109,7 +109,7 @@ devicesRoutes.post("/:id/setpoint", async (c: AppContext) => {
   try {
     const result = await engine.writeSetpoint(id, {
       value: input.value,
-      unit: input.unit === "%" ? "percent" : "engineering",
+      unit: input.unit,
     });
     recordAudit(db, {
       userId,

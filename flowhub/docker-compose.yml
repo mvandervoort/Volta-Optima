@@ -1,0 +1,43 @@
+services:
+  app:
+    build: .
+    image: flowhub:local
+    restart: unless-stopped
+    environment:
+      FLOWHUB_CONFIG: /etc/flowhub/config.json
+      FLOWHUB_DATA_DIR: /data
+      FLOWHUB_PORT: "8080"
+      FLOWHUB_SESSION_SECRET: ${FLOWHUB_SESSION_SECRET:?set FLOWHUB_SESSION_SECRET in .env}
+      FLOWHUB_ADMIN_USER: ${FLOWHUB_ADMIN_USER:-admin}
+      FLOWHUB_ADMIN_PASSWORD: ${FLOWHUB_ADMIN_PASSWORD:?set FLOWHUB_ADMIN_PASSWORD in .env}
+      FLOWHUB_INSECURE_COOKIE: ${FLOWHUB_INSECURE_COOKIE:-0}
+    volumes:
+      - ./config.json:/etc/flowhub/config.json:ro
+      - flowhub-data:/data
+    expose:
+      - "8080"
+    networks:
+      - flowhub
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - flowhub
+
+volumes:
+  flowhub-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  flowhub:
+    driver: bridge
