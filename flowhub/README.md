@@ -59,10 +59,12 @@ bun run build
 
 ## Documentatie
 
+- `docs/getting-started.md` — **startgids: van nul naar werkend, fase voor fase**
 - `docs/s-protocol.md` — byte-layouts, commando- en statuscodes
 - `docs/plan.md` — ontwerp en checklist
 - `docs/converter-setup.md` — converterconfiguratie
 - `docs/restore.md` — back-up en restore
+- `docs/runbook.md` — dagelijks beheer en storingen
 
 ## Belangrijke beperkingen
 

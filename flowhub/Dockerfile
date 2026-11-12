@@ -17,6 +17,7 @@ RUN bun install --frozen-lockfile --production
 
 COPY --from=build /app/src ./src
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/scripts ./scripts
 
 RUN mkdir -p /data && chown -R bun:bun /data
 USER bun

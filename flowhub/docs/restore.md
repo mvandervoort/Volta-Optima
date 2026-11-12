@@ -10,6 +10,13 @@ meegenomen in de snapshot.
 FLOWHUB_DATA_DIR=/data bun scripts/backup.ts
 ```
 
+In Docker (het script zit in de image):
+
+```bash
+docker compose exec -e FLOWHUB_BACKUP_DIR=/data/backups -e FLOWHUB_BACKUP_RETENTION=14 \
+  app bun scripts/backup.ts
+```
+
 Omgevingsvariabelen:
 
 | Variabele | Default | Betekenis |
