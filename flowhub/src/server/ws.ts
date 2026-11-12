@@ -2,6 +2,7 @@ import type { ServerWebSocket } from "bun";
 import type { Database } from "bun:sqlite";
 import { PollEngine } from "./bus/pollEngine";
 import { verifySessionToken } from "./auth";
+import { getUserById } from "./db";
 
 export type ClientWebSocket = ServerWebSocket<{ url: string; cookie: string; userId?: number }>;
 
@@ -31,7 +32,11 @@ export class WebSocketHub {
       const parsed = new URL(url, "http://localhost");
       const token = parsed.searchParams.get("token") ?? sessionFromCookie(cookie);
       if (!token) return null;
-      return verifySessionToken(token, this.sessionSecret);
+      const session = verifySessionToken(token, this.sessionSecret);
+      if (session === null) return null;
+      const user = getUserById(this.db, session.userId);
+      if (!user || user.active !== 1 || user.token_version !== session.tokenVersion) return null;
+      return user.id;
     } catch {
       return null;
     }

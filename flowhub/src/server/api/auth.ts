@@ -11,6 +11,8 @@ import {
 import {
   getUserByUsername,
   getUserById,
+  touchLastLogin,
+  bumpTokenVersion,
 } from "../db";
 import { recordAudit } from "../audit";
 import { z } from "zod";
@@ -38,7 +40,7 @@ authRoutes.post("/login", async (c: AppContext) => {
   } catch {
     return c.json({ error: "invalid_request" }, 400);
   }
-  const key = `${ip}:${body.username}`;
+  const key = ip;
   if (rateLimiter.isBlocked(key)) {
     recordAudit(db, {
       username: body.username,
@@ -66,7 +68,8 @@ authRoutes.post("/login", async (c: AppContext) => {
     return c.json({ error: "account_inactive" }, 403);
   }
   rateLimiter.reset(key);
-  const token = createSessionToken(user.id, secret);
+  touchLastLogin(db, user.id);
+  const token = createSessionToken(user.id, secret, user.token_version);
   setSessionCookie(c, token, insecure());
   recordAudit(db, {
     userId: user.id,
@@ -86,6 +89,7 @@ authRoutes.post("/logout", async (c: AppContext) => {
   const db = c.get("db");
   const userId = c.get("userId");
   const user = userId !== undefined ? getUserById(db, userId) : null;
+  if (user) bumpTokenVersion(db, user.id);
   clearSessionCookie(c, insecure());
   if (user) {
     recordAudit(db, {

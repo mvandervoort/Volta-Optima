@@ -206,8 +206,13 @@ FLOWHUB_SESSION_SECRET=<openssl rand -hex 32>
 FLOWHUB_PORT=8080
 FLOWHUB_CONFIG=/etc/flowhub/config.json
 FLOWHUB_DATA_DIR=/data
+FLOWHUB_TRUST_PROXY=1
 # FLOWHUB_INSECURE_COOKIE=1  <- niet zetten in productie
 ```
+
+> `FLOWHUB_TRUST_PROXY=1` hoort bij de Caddy-opstelling: alleen dan vertrouwt
+> de app `X-Forwarded-For` voor rate limiting. Zonder proxy laat je hem weg.
+> De app weigert te starten als `FLOWHUB_SESSION_SECRET` ontbreekt.
 
 > `config.json` moet naast `docker-compose.yml` bestaan **vóór** je `up` doet.
 > Ontbreekt het bestand, dan maakt Docker er een map van en start de app niet.
@@ -327,8 +332,15 @@ Wees hier eerlijk over richting de klant:
 
 - De **Docker-build is nooit uitgevoerd** in de ontwikkelsandbox (geen Docker
   beschikbaar). Fase 8 is de eerste echte test; reken op een iteratie.
-- Er is **geen echte 5850S** getest. Fase 5 en 7 zijn de hardwarevalidatie.
-- **Playwright E2E** is nog niet geschreven; UI-tests zijn handmatig gedaan.
+- Er is **geen echte 5850S** getest. De byte-layouts zijn vastgelegd met
+  golden-frame tests tegen `docs/s-protocol.md`, maar fase 5 en 7 zijn de
+  hardwarevalidatie. Controleer daar vooral #237 (klepstand, uint24) en
+  #196 (flow-unit, 2 bytes).
+- `#215` (setpoint-instellingen) heeft geen gedocumenteerde responslayout; de
+  setpoint-bron wordt best-effort gelezen bij een refresh en kan "onbekend"
+  blijven.
+- **Playwright E2E** bestaat (`tests/e2e/flowhub.e2e.ts`) en draait in CI met
+  Chromium; lokaal is een browserinstallatie nodig.
 - Write-protect (#128) wordt niet ondersteund door de 5850S. De UI toont dat
   als "niet ondersteund"; dat is verwacht gedrag, geen fout.
 - Geen GMP/21 CFR Part 11 en geen SIL. De audit is operationeel, de noodstop

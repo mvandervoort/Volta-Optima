@@ -11,6 +11,7 @@ export type AppVariables = {
   pollEngine: PollEngine;
   userId: number | undefined;
   userRole: UserRole | undefined;
+  correlationId: string;
 };
 
 export type AppContext = Context<{ Variables: AppVariables }>;
@@ -21,10 +22,10 @@ export const loadSession: MiddlewareHandler<{ Variables: AppVariables }> = async
 ) => {
   const db = c.get("db");
   const secret = c.get("sessionSecret");
-  const userId = getSessionUser(c, secret);
-  if (userId !== null) {
-    const user = getUserById(db, userId);
-    if (user && user.active === 1) {
+  const session = getSessionUser(c, secret);
+  if (session !== null) {
+    const user = getUserById(db, session.userId);
+    if (user && user.active === 1 && user.token_version === session.tokenVersion) {
       c.set("userId", user.id);
       c.set("userRole", user.role);
     }

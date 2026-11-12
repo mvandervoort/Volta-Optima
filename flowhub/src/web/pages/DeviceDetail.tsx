@@ -70,10 +70,23 @@ export function DeviceDetail({
             <dt>Flow</dt>
             <dd>{device.flow?.toFixed(2) ?? "—"} {device.unit ?? ""}</dd>
             <dt>Setpoint</dt>
-            <dd>{device.setpoint?.toFixed(2) ?? "—"} {device.setpointUnit ?? ""}</dd>
+            <dd>
+              {device.setpoint?.toFixed(2) ?? "—"} {device.setpointUnit ?? ""}
+              {device.setpointScaled !== null && device.flowUnit !== null && (
+                <span className="muted"> ({device.setpointScaled.toFixed(2)} {device.flowUnit})</span>
+              )}
+            </dd>
+            <dt>Setpoint-bron</dt>
+            <dd className={device.setpointSource === "analog" ? "warn" : undefined}>
+              {device.setpointSource === "analog"
+                ? "analoog — kan de digitale setpoint overrulen"
+                : device.setpointSource === "digital"
+                  ? "digitaal"
+                  : "onbekend (nog geen refresh uitgevoerd)"}
+            </dd>
             <dt>Temperatuur</dt>
             <dd>{device.temperature?.toFixed(2) ?? "—"}</dd>
-            <dt>Valve override</dt>
+            <dt>Klepstand (ruw)</dt>
             <dd>{device.valvePosition ?? "—"}</dd>
             <dt>Laatst gezien</dt>
             <dd className="muted">{device.lastSeen ?? "—"}</dd>
@@ -183,11 +196,22 @@ function DeviceConfigCard({
   run: (action: () => Promise<unknown>, message: string) => Promise<void>;
 }) {
   const [name, setName] = useState(device.name);
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(device.enabled);
   const [pollIntervalMs, setPollIntervalMs] = useState(1000);
-  const [flowUnit, setFlowUnit] = useState(String(info?.flow_unit ?? ""));
-  const [tempUnit, setTempUnit] = useState(String(info?.temp_unit ?? ""));
-  const [setpointSource, setSetpointSource] = useState<"analog" | "digital">("digital");
+  const [flowUnit, setFlowUnit] = useState("");
+  const [tempUnit, setTempUnit] = useState("");
+  const [setpointSource, setSetpointSource] = useState<"analog" | "digital">(
+    device.setpointSource === "analog" ? "analog" : "digital",
+  );
+
+  const writeConfig = () => {
+    const payload: Record<string, unknown> = { setpointSource };
+    if (flowUnit.trim() !== "") payload.flowUnit = Number(flowUnit);
+    if (tempUnit.trim() !== "") payload.tempUnit = Number(tempUnit);
+    if (window.confirm("Configuratie naar het apparaat schrijven?")) {
+      void run(() => api.writeConfig(device.id, payload), "Configuratie geschreven");
+    }
+  };
 
   return (
     <article className="card wide">
@@ -195,6 +219,24 @@ function DeviceConfigCard({
       <p className="warn">
         Let op: analoge of digitale setpoint-source kan bediening overrulen. Wijzigingen worden gelogd met oude en nieuwe waarde.
       </p>
+
+      {info && (
+        <dl className="device-info">
+          <dt>Model</dt>
+          <dd>{info.model ?? "—"}</dd>
+          <dt>Serienummer</dt>
+          <dd className="mono">{info.serial ?? "—"}</dd>
+          <dt>Firmware / hardware</dt>
+          <dd>
+            {info.firmware ?? "—"} / {info.hardware ?? "—"}
+          </dd>
+          <dt>Tag</dt>
+          <dd>{info.tag ?? "—"}</dd>
+          <dt>Info bijgewerkt</dt>
+          <dd className="muted">{info.refreshed_at ?? "—"}</dd>
+        </dl>
+      )}
+
       <div className="grid-2">
         <label>
           Naam
@@ -209,11 +251,11 @@ function DeviceConfigCard({
           />
         </label>
         <label>
-          Flow-unit
+          Flow-unit (leeg laten = niet wijzigen)
           <input value={flowUnit} inputMode="numeric" onChange={(event) => setFlowUnit(event.target.value)} />
         </label>
         <label>
-          Temperatuur-unit
+          Temperatuur-unit (leeg laten = niet wijzigen)
           <input value={tempUnit} inputMode="numeric" onChange={(event) => setTempUnit(event.target.value)} />
         </label>
         <label>
@@ -245,23 +287,7 @@ function DeviceConfigCard({
         >
           Instellingen opslaan
         </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => {
-            if (window.confirm("Configuratie naar het apparaat schrijven?")) {
-              void run(
-                () =>
-                  api.writeConfig(device.id, {
-                    flowUnit: Number(flowUnit),
-                    tempUnit: Number(tempUnit),
-                    setpointSource,
-                  }),
-                "Configuratie geschreven",
-              );
-            }
-          }}
-        >
+        <button type="button" className="secondary" onClick={writeConfig}>
           Configuratie schrijven
         </button>
         <button type="button" className="secondary" onClick={() => void run(() => api.refresh(device.id), "Verversen gestart")}>

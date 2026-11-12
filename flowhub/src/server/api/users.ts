@@ -19,7 +19,6 @@ const userSchema = z.object({
 });
 
 const patchUserSchema = z.object({
-  name: z.string().optional(),
   role: z.enum(["operator", "admin"]).optional(),
   active: z.boolean().optional(),
 });
@@ -90,6 +89,9 @@ usersRoutes.patch("/:id", async (c: AppContext) => {
   }
   const user = getUserById(db, id);
   if (!user) return c.json({ error: "not_found" }, 404);
+  if (id === userId && (input.active === false || (input.role !== undefined && input.role !== "admin"))) {
+    return c.json({ error: "cannot_reduce_own_access" }, 400);
+  }
   if (input.role !== undefined) setUserRole(db, id, input.role);
   if (input.active !== undefined) setUserActive(db, id, input.active);
   recordAudit(db, {

@@ -289,6 +289,29 @@ dd {
   color: var(--muted);
 }
 
+.live {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.live.ok {
+  color: var(--ok);
+}
+
+.live.warn {
+  color: var(--warn);
+}
+
+.pager {
+  margin-top: 12px;
+}
+
+.device-info {
+  margin-bottom: 16px;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #14171c;

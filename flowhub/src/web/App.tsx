@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, type DeviceSnapshot, type SessionUser } from "./api";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
@@ -29,7 +29,7 @@ export function App() {
   const [devices, setDevices] = useState<DeviceSnapshot[]>([]);
   const [route, setRoute] = useState<Route>(parseRoute);
   const [busy, setBusy] = useState(true);
-  const socketRef = useRef<WebSocket | null>(null);
+  const [live, setLive] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute());
@@ -66,23 +66,48 @@ export function App() {
     if (user === null) return;
     loadDevices();
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(`${protocol}//${window.location.host}/api/v1/ws`);
-    socketRef.current = socket;
-    socket.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(String(event.data)) as {
-          type: string;
-          devices?: DeviceSnapshot[];
-        };
-        if (payload.type === "state" && payload.devices) setDevices(payload.devices);
-      } catch {
-        // negeren: onbekend bericht
-      }
+    let closed = false;
+    let socket: WebSocket | null = null;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const connect = () => {
+      if (closed) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${window.location.host}/api/v1/ws`);
+      socket.onopen = () => {
+        attempt = 0;
+        setLive(true);
+        loadDevices();
+      };
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(String(event.data)) as {
+            type: string;
+            devices?: DeviceSnapshot[];
+          };
+          if (payload.type === "state" && payload.devices) setDevices(payload.devices);
+          setLive(true);
+        } catch {
+          // onbekend bericht negeren
+        }
+      };
+      socket.onerror = () => socket?.close();
+      socket.onclose = () => {
+        setLive(false);
+        if (closed) return;
+        attempt += 1;
+        const delay = Math.min(1000 * 2 ** (attempt - 1), 15_000);
+        timer = setTimeout(connect, delay);
+      };
     };
+
+    connect();
+
     return () => {
-      socket.close();
-      socketRef.current = null;
+      closed = true;
+      if (timer) clearTimeout(timer);
+      socket?.close();
     };
   }, [user, loadDevices]);
 
@@ -136,6 +161,9 @@ export function App() {
           )}
         </nav>
         <div className="user">
+          <span className={live ? "live ok" : "live warn"}>
+            {live ? "live" : "verbinding verbroken"}
+          </span>
           <span>
             {user.username} <span className="badge">{isAdmin ? "admin" : "operator"}</span>
           </span>

@@ -5,11 +5,12 @@ export const START_LONG_MASTER = 0x82;
 export const START_LONG_SLAVE = 0x86;
 
 export const CMD = {
+  READ_UNIQUE_ID: 0,
   READ_PRIMARY_VARIABLE: 1,
   READ_PRIMARY_VARIABLE_CURRENT_PERCENT: 2,
   READ_DYNAMIC_VARIABLES: 3,
   WRITE_POLLING_ADDRESS: 6,
-  READ_UNIQUE_IDENTIFIER: 11,
+  READ_UNIQUE_ID_BY_TAG: 11,
   READ_TAG_DESCRIPTOR_DATE: 13,
   READ_ADDITIONAL_STATUS: 48,
   READ_PROCESS_GAS_TYPE: 150,
@@ -160,6 +161,50 @@ export function encodeUint24(value: number): Uint8Array {
 
 export function decodeUint24(data: Uint8Array, offset = 0): number {
   return ((data[offset] ?? 0) << 16) | ((data[offset + 1] ?? 0) << 8) | (data[offset + 2] ?? 0);
+}
+
+/**
+ * #235 / #236 response layout (10 bytes):
+ *   #0    percent unit code (57)
+ *   #1-4  setpoint in % of full scale (float32)
+ *   #5    selected flow unit code (uint8)
+ *   #6-9  setpoint in the selected flow unit (float32)
+ */
+export type SetpointReading = {
+  percent: number;
+  flowUnitCode: number;
+  scaled: number;
+};
+
+export function decodeSetpoint(data: Uint8Array): SetpointReading {
+  return {
+    percent: decodeFloat(data, 1),
+    flowUnitCode: decodeUint8(data, 5),
+    scaled: decodeFloat(data, 6),
+  };
+}
+
+/**
+ * #0 / #11 response layout (12 bytes):
+ *   #0 254, #1 manufacturer, #2 device type, #3 preambles, #4 universal rev,
+ *   #5 command rev, #6 software rev, #7 hardware rev, #8 flags, #9-11 device id
+ */
+export type DeviceIdentity = {
+  manufacturerId: number;
+  deviceTypeCode: number;
+  softwareRevision: number;
+  hardwareRevision: number;
+  deviceId: number;
+};
+
+export function decodeIdentity(data: Uint8Array): DeviceIdentity {
+  return {
+    manufacturerId: decodeUint8(data, 1),
+    deviceTypeCode: decodeUint8(data, 2),
+    softwareRevision: decodeUint8(data, 6),
+    hardwareRevision: decodeUint8(data, 7),
+    deviceId: decodeUint24(data, 9),
+  };
 }
 
 export function decodeAscii(data: Uint8Array): string {

@@ -55,6 +55,7 @@ bun test               # codec, polling, golden frames
 bun run typecheck
 bun run lint
 bun run build
+bun run test:ui        # Playwright (start simulator + app zelf; browsers nodig)
 ```
 
 ## Documentatie

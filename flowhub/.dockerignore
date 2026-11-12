@@ -2,6 +2,8 @@ node_modules
 dist
 .git
 .github
+config.json
+.e2e-data
 data
 backups
 playwright-report

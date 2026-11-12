@@ -4,18 +4,26 @@ import { api, type AuditEntry } from "../api";
 export function Audit() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [limit, setLimit] = useState(200);
+  const [limit, setLimit] = useState(50);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const load = useCallback((rows: number) => {
+  const load = useCallback((rows: number, skip: number) => {
+    setBusy(true);
     api
-      .audit(rows)
-      .then((result) => setEntries(result.audit))
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "laden mislukt"));
+      .audit(rows, skip)
+      .then((result) => {
+        setEntries(result.audit);
+        setHasMore(result.hasMore);
+      })
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "laden mislukt"))
+      .finally(() => setBusy(false));
   }, []);
 
   useEffect(() => {
-    load(limit);
-  }, [load, limit]);
+    load(limit, offset);
+  }, [load, limit, offset]);
 
   return (
     <section>
@@ -24,7 +32,13 @@ export function Audit() {
         <div className="row">
           <label className="inline">
             Regels
-            <select value={String(limit)} onChange={(event) => setLimit(Number(event.target.value))}>
+            <select
+              value={String(limit)}
+              onChange={(event) => {
+                setOffset(0);
+                setLimit(Number(event.target.value));
+              }}
+            >
               <option value="50">50</option>
               <option value="200">200</option>
               <option value="500">500</option>
@@ -68,6 +82,28 @@ export function Audit() {
           ))}
         </tbody>
       </table>
+
+      <div className="row pager">
+        <button
+          type="button"
+          className="secondary"
+          disabled={offset === 0 || busy}
+          onClick={() => setOffset(Math.max(0, offset - limit))}
+        >
+          Vorige
+        </button>
+        <span className="muted small">
+          regels {offset + 1}–{offset + entries.length}
+        </span>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!hasMore || busy}
+          onClick={() => setOffset(offset + limit)}
+        >
+          Volgende
+        </button>
+      </div>
     </section>
   );
 }

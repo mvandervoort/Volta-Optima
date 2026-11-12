@@ -7,41 +7,60 @@ export const auditRoutes = new Hono<{ Variables: AppVariables }>();
 
 auditRoutes.use("*", requireAuth, requireAdmin);
 
+const MAX_LIMIT = 500;
+
 auditRoutes.get("/", async (c: AppContext) => {
   const db = c.get("db");
-  const limit = c.req.query("limit");
+  const limitRaw = c.req.query("limit");
+  const offsetRaw = c.req.query("offset");
   const deviceId = c.req.query("deviceId");
-  const parsedLimit = limit !== undefined ? Number(limit) : undefined;
-  if (parsedLimit !== undefined && !Number.isFinite(parsedLimit)) {
+  const limit = limitRaw !== undefined ? Number(limitRaw) : 200;
+  const offset = offsetRaw !== undefined ? Number(offsetRaw) : 0;
+  if (!Number.isFinite(limit) || limit < 1 || !Number.isFinite(offset) || offset < 0) {
     return c.json({ error: "invalid_request" }, 400);
   }
-  const rows = listAudit(db, { limit: parsedLimit, deviceId: deviceId ?? undefined });
-  return c.json({ audit: rows });
+  const effectiveLimit = Math.min(Math.trunc(limit), MAX_LIMIT);
+  const effectiveOffset = Math.trunc(offset);
+  const rows = listAudit(db, {
+    limit: effectiveLimit,
+    offset: effectiveOffset,
+    deviceId: deviceId ?? undefined,
+  });
+  return c.json({
+    audit: rows,
+    limit: effectiveLimit,
+    offset: effectiveOffset,
+    hasMore: rows.length === effectiveLimit,
+  });
 });
+
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  let text = String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
 
 auditRoutes.get("/export.csv", async (c: AppContext) => {
   const db = c.get("db");
   const rows = listAudit(db, { limit: 10_000 });
   const lines = ["ts,username,role,action,device_id,field,old_value,new_value,success,detail"];
   for (const row of rows) {
-    const csv = (v: unknown) => {
-      if (v === null || v === undefined) return "";
-      const s = String(v);
-      if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-      return s;
-    };
-    lines.push([
-      csv(row.ts),
-      csv(row.username),
-      csv(row.role),
-      csv(row.action),
-      csv(row.device_id),
-      csv(row.field),
-      csv(row.old_value),
-      csv(row.new_value),
-      csv(row.success),
-      csv(row.detail),
-    ].join(","));
+    lines.push(
+      [
+        csvCell(row.ts),
+        csvCell(row.username),
+        csvCell(row.role),
+        csvCell(row.action),
+        csvCell(row.device_id),
+        csvCell(row.field),
+        csvCell(row.old_value),
+        csvCell(row.new_value),
+        csvCell(row.success),
+        csvCell(row.detail),
+      ].join(","),
+    );
   }
   c.header("Content-Type", "text/csv; charset=utf-8");
   c.header("Content-Disposition", 'attachment; filename="audit.csv"');

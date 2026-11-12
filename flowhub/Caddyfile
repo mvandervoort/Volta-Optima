@@ -1,6 +1,5 @@
 {
 	admin off
-	auto_https disable_redirects
 }
 
 flowhub.lan {
@@ -8,6 +7,7 @@ flowhub.lan {
 	encode gzip
 
 	header {
+		Strict-Transport-Security "max-age=31536000"
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:; frame-ancestors 'none'"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"

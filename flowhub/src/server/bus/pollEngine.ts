@@ -1,7 +1,18 @@
 import type { Database } from "bun:sqlite";
-import { buildRequest, decodeFloat, decodeUint8, CMD, encodeFloat, encodeUint8 } from "./sProtocol";
+import {
+  buildRequest,
+  decodeFloat,
+  decodeIdentity,
+  decodeSetpoint,
+  decodeUint8,
+  decodeUint24,
+  CMD,
+  encodeFloat,
+  encodeUint8,
+} from "./sProtocol";
 import { parseAddress, type Config, type ParsedAddress } from "../config";
 import { ConverterConnection, type ConnectionState } from "./tcp";
+import { log } from "../log";
 import {
   cacheDeviceInfo,
   ensureDevices,
@@ -9,6 +20,7 @@ import {
   listDeviceStates,
   listDevices,
   markDeviceOffline,
+  setDeviceSetpointSource,
   upsertDeviceState,
   type DeviceRow,
   type DeviceState,
@@ -21,12 +33,16 @@ export type DeviceSnapshot = {
   configId: string;
   name: string;
   address: string;
+  enabled: boolean;
   online: boolean;
   status: DeviceStatus;
   flow: number | null;
   unit: string | null;
   setpoint: number | null;
   setpointUnit: string | null;
+  setpointScaled: number | null;
+  flowUnit: string | null;
+  setpointSource: "analog" | "digital" | "unknown";
   valvePosition: number | null;
   temperature: number | null;
   totalizer: number | null;
@@ -38,6 +54,7 @@ type RuntimeDevice = {
   row: DeviceRow;
   address: ParsedAddress;
   consecutiveFailures: number;
+  nextPollAt: number;
 };
 
 export type PollResult = {
@@ -56,6 +73,7 @@ export type PollEngineEvents = {
 const REQUEST_TIMEOUT_MS = 500;
 const MAX_FAILURES = 3;
 const STALE_AFTER_MS = 3000;
+const PERCENT_UNIT_CODE = 57;
 
 /**
  * Owns the single RS-485 master connection and polls configured devices
@@ -102,9 +120,23 @@ export class PollEngine {
     this.reloadDevices();
     this.running = true;
     await this.connection.connect().catch((error: unknown) => {
-      console.error("Initial converter connect failed", error);
+      log("error", "converter_connect_failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
+    void this.refreshAllDevices();
     this.schedule(0);
+  }
+
+  private async refreshAllDevices(): Promise<void> {
+    for (const device of this.devices.values()) {
+      if (!device.row.enabled) continue;
+      try {
+        await this.refreshDevice(device);
+      } catch {
+        // Identiteit is optioneel; een device dat dit niet ondersteunt blijft bruikbaar.
+      }
+    }
   }
 
   stop(): void {
@@ -121,12 +153,38 @@ export class PollEngine {
     for (const row of listDevices(this.db)) {
       const cfg = this.config.bus.devices.find((d) => d.id === row.config_id);
       if (!cfg) continue;
+      let address: ParsedAddress;
+      try {
+        address = parseAddress(cfg.address);
+      } catch (error) {
+        log("error", "device_address_invalid", {
+          configId: row.config_id,
+          address: cfg.address,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
       this.devices.set(row.id, {
         row,
-        address: parseAddress(cfg.address),
+        address,
         consecutiveFailures: 0,
+        nextPollAt: 0,
       });
     }
+  }
+
+  private pollIntervalFor(device: RuntimeDevice): number {
+    const configured = device.row.poll_interval_ms;
+    if (typeof configured === "number" && configured > 0) return configured;
+    return this.config.bus.pollIntervalMs;
+  }
+
+  private scheduleDelay(): number {
+    let interval = this.config.bus.pollIntervalMs;
+    for (const device of this.devices.values()) {
+      interval = Math.min(interval, this.pollIntervalFor(device));
+    }
+    return Math.max(250, interval);
   }
 
   private schedule(delayMs: number): void {
@@ -140,11 +198,13 @@ export class PollEngine {
 
   private async cycle(): Promise<void> {
     const budgetStart = Date.now();
-    const budgetMs = this.config.bus.pollIntervalMs;
+    const budgetMs = this.scheduleDelay();
     for (const device of this.devices.values()) {
       if (!device.row.enabled) continue;
+      if (device.nextPollAt > Date.now()) continue;
       if (Date.now() - budgetStart >= budgetMs) break;
       await this.pollDevice(device);
+      device.nextPollAt = Date.now() + this.pollIntervalFor(device);
     }
     this.lastPollAt = new Date().toISOString();
     this.events.onState?.(this.snapshots());
@@ -171,8 +231,10 @@ export class PollEngine {
       upsertDeviceState(this.db, device.row.id, {
         flow: flow.value,
         unit: flow.unit,
-        setpoint: setpoint.value,
-        setpoint_unit: setpoint.unit,
+        setpoint: setpoint.percent,
+        setpoint_unit: unitName(PERCENT_UNIT_CODE),
+        setpoint_scaled: setpoint.scaled,
+        flow_unit_code: setpoint.flowUnitCode,
         valve_position: valve,
         temperature,
         totalizer: null,
@@ -216,14 +278,37 @@ export class PollEngine {
     return response.data;
   }
 
+  /** Writes get a short retry; a single missed turnaround must not fail a setpoint change. */
+  private async writeTransaction(
+    device: RuntimeDevice,
+    command: number,
+    data?: Uint8Array,
+  ): Promise<Uint8Array> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.transaction(device, command, data);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (!/timeout|closed|not online/i.test(lastError.message)) throw lastError;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    }
+    throw lastError ?? new Error("write failed");
+  }
+
   private async readFlow(device: RuntimeDevice): Promise<{ value: number | null; unit: string | null }> {
     const data = await this.transaction(device, CMD.READ_PRIMARY_VARIABLE);
     return { value: decodeFloat(data, 1), unit: unitName(decodeUint8(data, 0)) };
   }
 
-  private async readSetpoint(device: RuntimeDevice): Promise<{ value: number | null; unit: string | null }> {
+  private async readSetpoint(device: RuntimeDevice): Promise<{
+    percent: number;
+    flowUnitCode: number;
+    scaled: number;
+  }> {
     const data = await this.transaction(device, CMD.READ_SETPOINT);
-    return { value: decodeFloat(data, 1), unit: unitName(decodeUint8(data, 5)) };
+    return decodeSetpoint(data);
   }
 
   private async readTemperature(device: RuntimeDevice): Promise<number | null> {
@@ -233,21 +318,42 @@ export class PollEngine {
 
   private async readValveControl(device: RuntimeDevice): Promise<number | null> {
     const data = await this.transaction(device, CMD.READ_VALVE_CONTROL);
-    return decodeFloat(data, 0);
+    return decodeUint24(data, 0);
+  }
+
+  private async readFlowUnit(
+    device: RuntimeDevice,
+  ): Promise<{ flowReference: number; flowUnit: number }> {
+    const data = await this.transaction(device, CMD.READ_FLOW_UNIT);
+    return { flowReference: decodeUint8(data, 0), flowUnit: decodeUint8(data, 1) };
+  }
+
+  /** #215 is best-effort: the manual does not document its response layout. */
+  private async readSetpointSource(device: RuntimeDevice): Promise<number | null> {
+    try {
+      const data = await this.transaction(device, CMD.READ_SETPOINT_SETTINGS);
+      if (data.length < 1) return null;
+      return decodeUint8(data, 0);
+    } catch {
+      return null;
+    }
   }
 
   /** Refresh identity/config info and cache it in SQLite. */
   async refreshDevice(device: RuntimeDevice): Promise<void> {
-    const data = await this.transaction(device, CMD.READ_UNIQUE_IDENTIFIER);
+    const data = await this.transaction(device, CMD.READ_UNIQUE_ID);
+    const identity = decodeIdentity(data);
     cacheDeviceInfo(this.db, device.row.id, {
-      model: `Brooks ${decodeUint8(data, 2)}`,
-      serial: null,
+      model: `Brooks ${identity.deviceTypeCode}`,
+      serial: String(identity.deviceId),
       tag: null,
-      firmware: `${decodeUint8(data, 6)}.${decodeUint8(data, 7)}`,
-      hardware: String(decodeUint8(data, 7)),
-      manufacturer_id: decodeUint8(data, 1),
-      device_type_code: decodeUint8(data, 2),
+      firmware: String(identity.softwareRevision),
+      hardware: String(identity.hardwareRevision),
+      manufacturer_id: identity.manufacturerId,
+      device_type_code: identity.deviceTypeCode,
     });
+    const source = await this.readSetpointSource(device);
+    if (source !== null) setDeviceSetpointSource(this.db, device.row.id, source);
   }
 
   private getDevice(deviceId: number): RuntimeDevice {
@@ -266,19 +372,26 @@ export class PollEngine {
   async writeSetpoint(
     deviceId: number,
     input: { value: number; unit: "percent" | "engineering" },
-  ): Promise<{ setpoint: number | null; setpointUnit: string | null; valvePosition: number | null }> {
+  ): Promise<{
+    setpoint: number | null;
+    setpointUnit: string | null;
+    setpointScaled: number | null;
+    valvePosition: number | null;
+  }> {
     const device = this.getDevice(deviceId);
-    const unitCode = input.unit === "percent" ? 57 : 250;
+    const unitCode = input.unit === "percent" ? PERCENT_UNIT_CODE : 250;
     const data = new Uint8Array([unitCode, ...Array.from(encodeFloat(input.value))]);
-    await this.transaction(device, CMD.WRITE_SETPOINT, data);
+    await this.writeTransaction(device, CMD.WRITE_SETPOINT, data);
     const setpoint = await this.readSetpoint(device);
     const valvePosition = await this.readValveControl(device);
     const existing = getDeviceState(this.db, device.row.id);
     upsertDeviceState(this.db, device.row.id, {
       flow: existing?.flow ?? null,
       unit: existing?.unit ?? null,
-      setpoint: setpoint.value,
-      setpoint_unit: setpoint.unit,
+      setpoint: setpoint.percent,
+      setpoint_unit: unitName(PERCENT_UNIT_CODE),
+      setpoint_scaled: setpoint.scaled,
+      flow_unit_code: setpoint.flowUnitCode,
       valve_position: valvePosition,
       temperature: existing?.temperature ?? null,
       totalizer: existing?.totalizer ?? null,
@@ -287,8 +400,9 @@ export class PollEngine {
       last_seen: existing?.last_seen ?? null,
     });
     return {
-      setpoint: setpoint.value,
-      setpointUnit: setpoint.unit,
+      setpoint: setpoint.percent,
+      setpointUnit: unitName(PERCENT_UNIT_CODE),
+      setpointScaled: setpoint.scaled,
       valvePosition,
     };
   }
@@ -300,9 +414,13 @@ export class PollEngine {
   ): Promise<{ code: number }> {
     const device = this.getDevice(deviceId);
     const code = mode === "normal" ? 0 : mode === "open" ? 1 : 2;
-    await this.transaction(device, CMD.WRITE_VALVE_OVERRIDE, encodeUint8(code));
+    await this.writeTransaction(device, CMD.WRITE_VALVE_OVERRIDE, encodeUint8(code));
     const data = await this.transaction(device, CMD.READ_VALVE_OVERRIDE);
-    return { code: decodeUint8(data, 0) };
+    const readback = decodeUint8(data, 0);
+    if (readback !== code) {
+      throw new Error(`Valve override readback mismatch: expected ${code}, got ${readback}`);
+    }
+    return { code: readback };
   }
 
   /** Write device configuration with readback. Write-protect (#128) is not supported on 5850S. */
@@ -320,14 +438,28 @@ export class PollEngine {
       throw new Error("Write-protect (#128) is not supported on this device");
     }
     if (input.flowUnit !== undefined) {
-      await this.transaction(device, CMD.READ_FLOW_UNIT, encodeUint8(input.flowUnit));
-      await this.transaction(device, CMD.READ_FLOW_UNIT);
+      const current = await this.readFlowUnit(device);
+      await this.writeTransaction(
+        device,
+        CMD.READ_FLOW_UNIT,
+        Uint8Array.of(current.flowReference, input.flowUnit),
+      );
+      const after = await this.readFlowUnit(device);
+      if (after.flowUnit !== input.flowUnit) {
+        throw new Error(`Flow unit readback mismatch: expected ${input.flowUnit}, got ${after.flowUnit}`);
+      }
     }
     if (input.tempUnit !== undefined) {
-      await this.transaction(device, CMD.READ_TEMPERATURE_UNIT, encodeUint8(input.tempUnit));
+      await this.writeTransaction(device, CMD.READ_TEMPERATURE_UNIT, encodeUint8(input.tempUnit));
+      const after = await this.transaction(device, CMD.READ_TEMPERATURE_UNIT);
+      const readback = decodeUint8(after, 0);
+      if (readback !== input.tempUnit) {
+        throw new Error(`Temperature unit readback mismatch: expected ${input.tempUnit}, got ${readback}`);
+      }
     }
     if (input.setpointSource !== undefined) {
-      await this.transaction(device, CMD.WRITE_SETPOINT_SOURCE, encodeUint8(input.setpointSource));
+      await this.writeTransaction(device, CMD.WRITE_SETPOINT_SOURCE, encodeUint8(input.setpointSource));
+      setDeviceSetpointSource(this.db, device.row.id, input.setpointSource);
     }
   }
 
@@ -349,12 +481,16 @@ export class PollEngine {
         configId: device.row.config_id,
         name: device.row.name,
         address: addressText(device.address),
+        enabled: device.row.enabled === 1,
         online: (state?.online ?? 0) === 1,
         status: this.statusOf(device, state),
         flow: state?.flow ?? null,
         unit: state?.unit ?? null,
         setpoint: state?.setpoint ?? null,
         setpointUnit: state?.setpoint_unit ?? null,
+        setpointScaled: state?.setpoint_scaled ?? null,
+        flowUnit: state?.flow_unit_code != null ? unitName(state.flow_unit_code) : null,
+        setpointSource: setpointSourceName(state?.setpoint_source ?? null),
         valvePosition: state?.valve_position ?? null,
         temperature: state?.temperature ?? null,
         totalizer: state?.totalizer ?? null,
@@ -383,6 +519,12 @@ function addressText(address: ParsedAddress): string {
   return Array.from(address.value)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function setpointSourceName(code: number | null): "analog" | "digital" | "unknown" {
+  if (code === 1) return "analog";
+  if (code === 3) return "digital";
+  return "unknown";
 }
 
 function unitName(code: number): string {

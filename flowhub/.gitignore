@@ -1,6 +1,8 @@
 node_modules
 dist
 data
+config.json
+.e2e-data
 backups
 .env
 *.db

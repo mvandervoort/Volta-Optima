@@ -17,19 +17,14 @@ const valveOverrideSchema = z.object({
   mode: z.enum(["normal", "open", "closed"]),
 });
 
-const configSchema = z.object({
-  gas: z.string().optional(),
-  flowUnit: z.number().int().optional(),
-  tempUnit: z.number().int().optional(),
-  alarmHigh: z.number().optional(),
-  alarmLow: z.number().optional(),
-  pid: z.string().optional(),
-  softstart: z.enum(["disabled", "linear"]).optional(),
-  valveRange: z.number().optional(),
-  valveOffset: z.number().optional(),
-  setpointSource: z.enum(["analog", "digital"]).optional(),
-  writeProtect: z.boolean().optional(),
-});
+const configSchema = z
+  .object({
+    flowUnit: z.number().int().optional(),
+    tempUnit: z.number().int().optional(),
+    setpointSource: z.enum(["analog", "digital"]).optional(),
+    writeProtect: z.boolean().optional(),
+  })
+  .strict();
 
 const devicePatchSchema = z.object({
   name: z.string().min(1).optional(),
@@ -76,6 +71,7 @@ devicesRoutes.patch("/:id", requireAdmin, async (c: AppContext) => {
     .get(id);
   if (!existing) return c.json({ error: "not_found" }, 404);
   updateDevice(db, id, input);
+  c.get("pollEngine").reloadDevices();
   recordAudit(db, {
     userId,
     username: actor,
@@ -106,6 +102,7 @@ devicesRoutes.post("/:id/setpoint", async (c: AppContext) => {
     return c.json({ error: "invalid_request" }, 400);
   }
   const { userId, username: actor, role: actorRole } = authenticated(c);
+  const started = Date.now();
   try {
     const result = await engine.writeSetpoint(id, {
       value: input.value,
@@ -119,7 +116,7 @@ devicesRoutes.post("/:id/setpoint", async (c: AppContext) => {
       deviceId: String(id),
       newValue: { value: input.value, unit: input.unit },
       success: true,
-      detail: `Setpoint written to ${input.value} ${input.unit}`,
+      detail: `Setpoint written to ${input.value} ${input.unit} in ${Date.now() - started} ms`,
     });
     return c.json(result);
   } catch (error) {
@@ -149,6 +146,7 @@ devicesRoutes.post("/:id/valve-override", async (c: AppContext) => {
     return c.json({ error: "invalid_request" }, 400);
   }
   const { userId, username: actor, role: actorRole } = authenticated(c);
+  const started = Date.now();
   try {
     const result = await engine.writeValveOverride(id, input.mode);
     recordAudit(db, {
@@ -159,7 +157,7 @@ devicesRoutes.post("/:id/valve-override", async (c: AppContext) => {
       deviceId: String(id),
       newValue: input.mode,
       success: true,
-      detail: `Valve override set to ${input.mode}`,
+      detail: `Valve override set to ${input.mode} in ${Date.now() - started} ms`,
     });
     return c.json(result);
   } catch (error) {

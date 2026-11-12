@@ -11,6 +11,7 @@ export type UserRow = {
   active: number;
   created_at: string;
   last_login: string | null;
+  token_version: number;
 };
 
 export type DeviceRow = {
@@ -88,6 +89,11 @@ export function setUserRole(db: Database, id: number, role: UserRole): void {
 
 export function touchLastLogin(db: Database, id: number): void {
   db.run("UPDATE users SET last_login = ? WHERE id = ?", [nowIso(), id]);
+}
+
+/** Revokes every outstanding session for a user. */
+export function bumpTokenVersion(db: Database, id: number): void {
+  db.run("UPDATE users SET token_version = token_version + 1 WHERE id = ?", [id]);
 }
 
 export function ensureDevices(db: Database, configDevices: { id: string; initialName: string }[]): void {
@@ -189,6 +195,9 @@ export type DeviceState = {
   unit: string | null;
   setpoint: number | null;
   setpoint_unit: string | null;
+  setpoint_scaled: number | null;
+  flow_unit_code: number | null;
+  setpoint_source: number | null;
   valve_position: number | null;
   temperature: number | null;
   totalizer: number | null;
@@ -208,28 +217,36 @@ export function listDeviceStates(db: Database): DeviceState[] {
   return db.query<DeviceState, []>("SELECT * FROM device_state").all();
 }
 
+export type DeviceStateUpdate = Omit<
+  DeviceState,
+  "device_id" | "updated_at" | "setpoint_source"
+>;
+
 export function upsertDeviceState(
   db: Database,
   deviceId: number,
-  state: Omit<DeviceState, "device_id" | "updated_at">,
+  state: DeviceStateUpdate,
 ): void {
   db.run(
     `INSERT INTO device_state
-      (device_id, flow, unit, setpoint, setpoint_unit, valve_position, temperature,
-       totalizer, status_bits, online, last_seen, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (device_id, flow, unit, setpoint, setpoint_unit, setpoint_scaled, flow_unit_code,
+       valve_position, temperature, totalizer, status_bits, online, last_seen, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(device_id) DO UPDATE SET
       flow = excluded.flow, unit = excluded.unit, setpoint = excluded.setpoint,
-      setpoint_unit = excluded.setpoint_unit, valve_position = excluded.valve_position,
-      temperature = excluded.temperature, totalizer = excluded.totalizer,
-      status_bits = excluded.status_bits, online = excluded.online,
-      last_seen = excluded.last_seen, updated_at = excluded.updated_at`,
+      setpoint_unit = excluded.setpoint_unit, setpoint_scaled = excluded.setpoint_scaled,
+      flow_unit_code = excluded.flow_unit_code,
+      valve_position = excluded.valve_position, temperature = excluded.temperature,
+      totalizer = excluded.totalizer, status_bits = excluded.status_bits,
+      online = excluded.online, last_seen = excluded.last_seen, updated_at = excluded.updated_at`,
     [
       deviceId,
       state.flow,
       state.unit,
       state.setpoint,
       state.setpoint_unit,
+      state.setpoint_scaled,
+      state.flow_unit_code,
       state.valve_position,
       state.temperature,
       state.totalizer,
@@ -241,17 +258,37 @@ export function upsertDeviceState(
   );
 }
 
+export function setDeviceSetpointSource(
+  db: Database,
+  deviceId: number,
+  source: number | null,
+): void {
+  db.run(
+    `INSERT INTO device_state (device_id, setpoint_source, online, updated_at)
+     VALUES (?, ?, 0, ?)
+     ON CONFLICT(device_id) DO UPDATE SET
+       setpoint_source = excluded.setpoint_source,
+       updated_at = excluded.updated_at`,
+    [deviceId, source, nowIso()],
+  );
+}
+
 export function markDeviceOffline(db: Database, deviceId: number): void {
   db.run(
     `INSERT INTO device_state (device_id, online, updated_at) VALUES (?, 0, ?)
-     ON CONFLICT(device_id) DO UPDATE SET online = 0, updated_at = excluded.updated_at`,
+     ON CONFLICT(device_id) DO UPDATE SET
+       online = 0,
+       flow = NULL, unit = NULL, setpoint = NULL, setpoint_unit = NULL,
+       setpoint_scaled = NULL, valve_position = NULL, temperature = NULL,
+       totalizer = NULL, status_bits = NULL,
+       updated_at = excluded.updated_at`,
     [deviceId, nowIso()],
   );
 }
 
 export function listAudit(
   db: Database,
-  opts: { limit?: number; deviceId?: string | null },
+  opts: { limit?: number; offset?: number; deviceId?: string | null },
 ): AuditRow[] {
   let sql = "SELECT * FROM audit";
   const params: (string | number)[] = [];
@@ -265,6 +302,10 @@ export function listAudit(
   if (opts.limit !== undefined) {
     sql += " LIMIT ?";
     params.push(opts.limit);
+    if (opts.offset !== undefined && opts.offset > 0) {
+      sql += " OFFSET ?";
+      params.push(opts.offset);
+    }
   }
   return db.query<AuditRow, (string | number)[]>(sql).all(...params);
 }

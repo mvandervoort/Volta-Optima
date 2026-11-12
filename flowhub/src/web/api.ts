@@ -14,12 +14,16 @@ export type DeviceSnapshot = {
   configId: string;
   name: string;
   address: string;
+  enabled: boolean;
   online: boolean;
   status: DeviceStatus;
   flow: number | null;
   unit: string | null;
   setpoint: number | null;
   setpointUnit: string | null;
+  setpointScaled: number | null;
+  flowUnit: string | null;
+  setpointSource: "analog" | "digital" | "unknown";
   valvePosition: number | null;
   temperature: number | null;
   totalizer: number | null;
@@ -29,12 +33,14 @@ export type DeviceSnapshot = {
 
 export type DeviceInfo = {
   device_id: number;
-  flow_unit: number | null;
-  temp_unit: number | null;
-  gas_type: number | null;
-  tag: string | null;
+  model: string | null;
   serial: string | null;
-  updated_at: string | null;
+  tag: string | null;
+  firmware: string | null;
+  hardware: string | null;
+  manufacturer_id: number | null;
+  device_type_code: number | null;
+  refreshed_at: string | null;
 };
 
 export type UserRow = {
@@ -121,7 +127,10 @@ export const api = {
   patchUser: (id: number, body: { role?: Role; active?: boolean }) =>
     request<UserRow>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 
-  audit: (limit = 200) => request<{ audit: AuditEntry[] }>(`/audit?limit=${limit}`),
+  audit: (limit = 200, offset = 0) =>
+    request<{ audit: AuditEntry[]; limit: number; offset: number; hasMore: boolean }>(
+      `/audit?limit=${limit}&offset=${offset}`,
+    ),
 };
 
 export { ApiError };

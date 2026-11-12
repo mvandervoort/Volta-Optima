@@ -7,15 +7,20 @@ import {
   START_SHORT_SLAVE,
   decodeFloat,
   encodeFloat,
+  encodeUint24,
   xorChecksum,
 } from "../../src/server/bus/sProtocol";
 
 type DeviceState = {
-  setpoint: number;
-  valveOverride: number;
-  valvePosition: number;
+  flowReference: number;
   flowUnit: number;
   tempUnit: number;
+  fullScale: number;
+  gasType: number;
+  setpointPercent: number;
+  setpointSource: number;
+  valveOverride: number;
+  valveControl: number;
 };
 
 const PORT = Number(process.env.FLOWHUB_SIM_PORT ?? process.argv[2] ?? 1111);
@@ -23,6 +28,45 @@ const SHORT_ADDRESS = Number(process.env.FLOWHUB_SIM_ADDRESS ?? 1);
 
 const OK: [number, number] = [0x00, 0x00];
 const NOT_SUPPORTED: [number, number] = [0x80, 0x00];
+
+const DEVICE_ID = 0x010203;
+const MANUFACTURER_ID = 10;
+const DEVICE_TYPE_CODE = 90;
+
+function identity(): Uint8Array {
+  return Uint8Array.of(
+    254,
+    MANUFACTURER_ID,
+    DEVICE_TYPE_CODE,
+    5,
+    1,
+    1,
+    3,
+    2,
+    0,
+    (DEVICE_ID >>> 16) & 0xff,
+    (DEVICE_ID >>> 8) & 0xff,
+    DEVICE_ID & 0xff,
+  );
+}
+
+function setpointPayload(state: DeviceState): Uint8Array {
+  const payload = new Uint8Array(10);
+  payload[0] = 57;
+  payload.set(encodeFloat(state.setpointPercent), 1);
+  payload[5] = state.flowUnit;
+  payload.set(encodeFloat(scaledFromPercent(state)), 6);
+  return payload;
+}
+
+function scaledFromPercent(state: DeviceState): number {
+  return (state.setpointPercent / 100) * state.fullScale;
+}
+
+function percentFromScaled(state: DeviceState, scaled: number): number {
+  if (state.fullScale === 0) return 0;
+  return (scaled / state.fullScale) * 100;
+}
 
 function buildResponse(
   address: Uint8Array,
@@ -89,6 +133,109 @@ function handleRequest(buffer: Uint8Array, state: DeviceState): Uint8Array | nul
   return buildResponse(target, long, command, status, payload);
 }
 
+function dispatch(
+  command: number,
+  data: Uint8Array,
+  state: DeviceState,
+): { payload: Uint8Array; status: [number, number] } {
+  switch (command) {
+    case 0:
+    case 11:
+      return { payload: identity(), status: OK };
+
+    case 1:
+      return { payload: withUnit(state.flowUnit, scaledFromPercent(state)), status: OK };
+
+    case 2: {
+      const payload = new Uint8Array(13);
+      payload[0] = state.flowUnit;
+      payload.set(encodeFloat(scaledFromPercent(state)), 1);
+      payload.set(encodeFloat(4), 5);
+      payload.set(encodeFloat(state.setpointPercent), 9);
+      return { payload, status: OK };
+    }
+
+    case 3: {
+      const payload = new Uint8Array(14);
+      payload.set(encodeFloat(4), 0);
+      payload[4] = state.flowUnit;
+      payload.set(encodeFloat(scaledFromPercent(state)), 5);
+      payload[9] = state.tempUnit;
+      payload.set(encodeFloat(22.5), 10);
+      return { payload, status: OK };
+    }
+
+    case 13: {
+      const tag = Buffer.from("SIM01@", "ascii");
+      const descriptor = Buffer.from("FLOWHUB-SIM ", "ascii");
+      const payload = new Uint8Array(21);
+      payload.set(tag.subarray(0, 6), 0);
+      payload.set(descriptor.subarray(0, 12), 6);
+      payload.set([24, 11, 12], 18);
+      return { payload, status: OK };
+    }
+
+    case 150:
+      return { payload: Uint8Array.of(state.gasType), status: OK };
+
+    case 152:
+      return { payload: encodeFloat(state.fullScale), status: OK };
+
+    case 195:
+      return { payload: Uint8Array.of(state.gasType), status: OK };
+
+    case 196:
+      if (data.length >= 2) {
+        state.flowReference = data[0]!;
+        state.flowUnit = data[1]!;
+      }
+      return { payload: Uint8Array.of(state.flowReference, state.flowUnit), status: OK };
+
+    case 197:
+      if (data.length >= 1) state.tempUnit = data[0]!;
+      return { payload: Uint8Array.of(state.tempUnit), status: OK };
+
+    case 215:
+      return { payload: Uint8Array.of(state.setpointSource), status: OK };
+
+    case 216:
+      if (data.length >= 1) state.setpointSource = data[0]!;
+      return { payload: Uint8Array.of(state.setpointSource), status: OK };
+
+    case 230:
+      return { payload: Uint8Array.of(state.valveOverride), status: OK };
+
+    case 231:
+      if (data.length < 1) return { payload: new Uint8Array(), status: NOT_SUPPORTED };
+      state.valveOverride = data[0]!;
+      return { payload: Uint8Array.of(state.valveOverride), status: OK };
+
+    case 235:
+      return { payload: setpointPayload(state), status: OK };
+
+    case 236: {
+      if (data.length < 5) return { payload: new Uint8Array(), status: NOT_SUPPORTED };
+      const unitCode = data[0]!;
+      const value = decodeFloat(data, 1);
+      if (unitCode === 57) {
+        state.setpointPercent = value;
+      } else {
+        state.setpointPercent = percentFromScaled(state, value);
+      }
+      return { payload: setpointPayload(state), status: OK };
+    }
+
+    case 237:
+      return { payload: encodeUint24(state.valveControl), status: OK };
+
+    case 128:
+      return { payload: new Uint8Array(), status: NOT_SUPPORTED };
+
+    default:
+      return { payload: new Uint8Array(), status: NOT_SUPPORTED };
+  }
+}
+
 function withUnit(unit: number, value: number): Uint8Array {
   const payload = new Uint8Array(5);
   payload[0] = unit;
@@ -96,67 +243,16 @@ function withUnit(unit: number, value: number): Uint8Array {
   return payload;
 }
 
-function dispatch(
-  command: number,
-  data: Uint8Array,
-  state: DeviceState,
-): { payload: Uint8Array; status: [number, number] } {
-  switch (command) {
-    case 1:
-    case 2:
-      return { payload: withUnit(state.flowUnit, 25), status: OK };
-    case 3: {
-      const payload = new Uint8Array(14);
-      payload.set(encodeFloat(25), 0);
-      payload.set(encodeFloat(22.5), 10);
-      return { payload, status: OK };
-    }
-    case 11:
-      return { payload: Uint8Array.of(0x00, 0x0a, 0x01, 0x02, 0x03, 0x04, 0x01, 0x00), status: OK };
-    case 13:
-      return { payload: Uint8Array.from(Buffer.from("SIM-MFC-1", "ascii")), status: OK };
-    case 150:
-      return { payload: Uint8Array.of(1), status: OK };
-    case 152:
-      return { payload: encodeFloat(100), status: OK };
-    case 195:
-      return { payload: Uint8Array.of(1), status: OK };
-    case 196:
-      return { payload: Uint8Array.of(state.flowUnit), status: OK };
-    case 197:
-      return { payload: Uint8Array.of(state.tempUnit), status: OK };
-    case 230:
-      return { payload: Uint8Array.of(state.valveOverride), status: OK };
-    case 231:
-      if (data.length < 1) return { payload: new Uint8Array(), status: NOT_SUPPORTED };
-      state.valveOverride = data[0]!;
-      return { payload: new Uint8Array(), status: OK };
-    case 235: {
-      const payload = new Uint8Array(6);
-      payload.set(encodeFloat(state.setpoint), 1);
-      payload[5] = state.flowUnit;
-      return { payload, status: OK };
-    }
-    case 236:
-      if (data.length < 5) return { payload: new Uint8Array(), status: NOT_SUPPORTED };
-      state.flowUnit = data[0]!;
-      state.setpoint = decodeFloat(data, 1);
-      return { payload: new Uint8Array(), status: OK };
-    case 237:
-      return { payload: encodeFloat(state.valvePosition), status: OK };
-    case 128:
-      return { payload: new Uint8Array(), status: NOT_SUPPORTED };
-    default:
-      return { payload: new Uint8Array(), status: NOT_SUPPORTED };
-  }
-}
-
 const state: DeviceState = {
-  setpoint: 85,
-  valveOverride: 0,
-  valvePosition: 100,
-  flowUnit: 57,
+  flowReference: 0,
+  flowUnit: 17,
   tempUnit: 1,
+  fullScale: 100,
+  gasType: 1,
+  setpointPercent: 85,
+  setpointSource: 3,
+  valveOverride: 0,
+  valveControl: 1000,
 };
 
 const server = createServer((socket: Socket) => {

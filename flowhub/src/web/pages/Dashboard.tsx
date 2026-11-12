@@ -13,6 +13,17 @@ function statusLabel(device: DeviceSnapshot): string {
   }
 }
 
+function sourceLabel(source: DeviceSnapshot["setpointSource"]): string {
+  switch (source) {
+    case "analog":
+      return "analoog";
+    case "digital":
+      return "digitaal";
+    default:
+      return "onbekend";
+  }
+}
+
 function value(value: number | null, unit: string | null): string {
   if (value === null || value === undefined) return "—";
   return `${value.toFixed(2)}${unit ? ` ${unit}` : ""}`;
@@ -27,6 +38,8 @@ export function Dashboard({
   onRefresh: () => void;
   isAdmin: boolean;
 }) {
+  const analogActive = devices.some((device) => device.setpointSource === "analog");
+
   return (
     <section>
       <div className="page-head">
@@ -35,6 +48,13 @@ export function Dashboard({
           Verversen
         </button>
       </div>
+
+      {analogActive && (
+        <p className="warn">
+          Let op: bij minimaal één device staat de setpoint-bron op <strong>analoog</strong>. Een
+          digitale setpoint kan daar worden overruled door de analoge ingang.
+        </p>
+      )}
 
       {devices.length === 0 ? (
         <p className="muted">Geen devices geconfigureerd.</p>
@@ -47,6 +67,7 @@ export function Dashboard({
               <th>Status</th>
               <th>Flow</th>
               <th>Setpoint</th>
+              <th>Bron</th>
               <th>Temperatuur</th>
               <th>Laatst gezien</th>
               <th />
@@ -59,7 +80,15 @@ export function Dashboard({
                 <td className="mono">{device.address}</td>
                 <td>{statusLabel(device)}</td>
                 <td>{value(device.flow, device.unit)}</td>
-                <td>{value(device.setpoint, device.setpointUnit)}</td>
+                <td>
+                  {value(device.setpoint, device.setpointUnit)}
+                  {device.setpointScaled !== null && device.flowUnit !== null && (
+                    <span className="muted small"> ({value(device.setpointScaled, device.flowUnit)})</span>
+                  )}
+                </td>
+                <td className={device.setpointSource === "analog" ? "warn" : undefined}>
+                  {sourceLabel(device.setpointSource)}
+                </td>
                 <td>{value(device.temperature, null)}</td>
                 <td className="muted">{device.lastSeen ?? "—"}</td>
                 <td>
@@ -73,7 +102,8 @@ export function Dashboard({
 
       {!isAdmin && (
         <p className="muted small">
-          Je bent operator. Je kunt setpoints schrijven en de klep bedienen; apparaatconfiguratie en gebruikersbeheer zijn admin-only.
+          Je bent operator. Je kunt setpoints schrijven en de klep bedienen; apparaatconfiguratie en
+          gebruikersbeheer zijn admin-only.
         </p>
       )}
     </section>

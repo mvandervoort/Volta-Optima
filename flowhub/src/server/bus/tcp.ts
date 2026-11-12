@@ -14,6 +14,10 @@ export class ConverterConnection {
   private socket: Socket | null = null;
   private parser = new FrameParser();
   private pending: Pending | null = null;
+  /** FIFO of queued transactions: one outstanding frame at a time on the bus. */
+  private chain: Promise<void> = Promise.resolve();
+  private queued = 0;
+  private static readonly MAX_QUEUE = 64;
   private state: ConnectionState = "offline";
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
@@ -100,20 +104,36 @@ export class ConverterConnection {
     timeoutMs = 500,
     expectedCommand = frame[6 + (frame[5] === 0x82 ? 5 : 1)] ?? 0,
   ): Promise<ParsedFrame> {
-    if (this.state !== "online" || !this.socket) {
-      return Promise.reject(new Error("Converter is not online"));
+    if (this.queued >= ConverterConnection.MAX_QUEUE) {
+      return Promise.reject(new Error("Converter queue is full"));
     }
-    if (this.pending) {
-      return Promise.reject(new Error("A protocol transaction is already in progress"));
-    }
-    return new Promise<ParsedFrame>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending = null;
-        reject(new Error("Protocol response timeout"));
-      }, timeoutMs);
-      this.pending = { expectedCommand, resolve, reject, timer };
-      this.socket!.write(frame);
+    const run = (): Promise<ParsedFrame> =>
+      new Promise<ParsedFrame>((resolve, reject) => {
+        if (this.state !== "online" || !this.socket) {
+          reject(new Error("Converter is not online"));
+          return;
+        }
+        if (this.pending) {
+          reject(new Error("A protocol transaction is already in progress"));
+          return;
+        }
+        const timer = setTimeout(() => {
+          this.pending = null;
+          reject(new Error("Protocol response timeout"));
+        }, timeoutMs);
+        this.pending = { expectedCommand, resolve, reject, timer };
+        this.socket.write(frame);
+      });
+
+    this.queued += 1;
+    const result = this.chain.then(run, run).finally(() => {
+      this.queued -= 1;
     });
+    this.chain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   async close(): Promise<void> {

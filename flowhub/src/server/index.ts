@@ -1,7 +1,7 @@
 import { serve } from "bun";
 import { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { loadConfig } from "./config";
 import { openDatabase } from "./db";
 import { ensureAdmin } from "./auth";
@@ -14,12 +14,25 @@ import { devicesRoutes } from "./api/devices";
 import { auditRoutes } from "./api/audit";
 import { loadSession } from "./middleware/auth";
 import type { AppVariables } from "./middleware/auth";
+import { correlationIdFrom, log } from "./log";
 
 const PORT = Number(process.env.FLOWHUB_PORT ?? 8080);
 const DATA_DIR = process.env.FLOWHUB_DATA_DIR ?? "./data";
 const DB_PATH = join(DATA_DIR, "flowhub.db");
-const DIST_DIR = join(process.cwd(), "dist");
-const SESSION_SECRET = process.env.FLOWHUB_SESSION_SECRET ?? "dev-secret-change-me";
+const DIST_DIR = resolve(process.cwd(), "dist");
+
+function requireSessionSecret(): string {
+  const secret = process.env.FLOWHUB_SESSION_SECRET ?? "";
+  if (!secret || secret === "dev-secret-change-me") {
+    throw new Error(
+      "FLOWHUB_SESSION_SECRET is required. Generate one with `openssl rand -hex 32`.",
+    );
+  }
+  if (process.env.NODE_ENV === "production" && secret.length < 32) {
+    throw new Error("FLOWHUB_SESSION_SECRET must be at least 32 characters in production.");
+  }
+  return secret;
+}
 
 function contentType(path: string): string {
   if (path.endsWith(".html")) return "text/html; charset=utf-8";
@@ -40,6 +53,15 @@ function staticResponse(filePath: string): Response {
   return new Response(buffer, { headers: { "content-type": contentType(filePath) } });
 }
 
+/** Resolves a request path inside dist and refuses anything that escapes it. */
+function distFile(requestPath: string): string | null {
+  const relative = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
+  if (relative.includes("\0")) return null;
+  const candidate = resolve(DIST_DIR, relative);
+  if (candidate !== DIST_DIR && !candidate.startsWith(DIST_DIR + sep)) return null;
+  return candidate;
+}
+
 function spaFallback(): Response | null {
   const index = join(DIST_DIR, "index.html");
   if (existsSync(index)) return staticResponse(index);
@@ -48,6 +70,7 @@ function spaFallback(): Response | null {
 
 async function main(): Promise<void> {
   const config = loadConfig();
+  const sessionSecret = requireSessionSecret();
   const db = openDatabase(DB_PATH);
   await ensureAdmin(db);
 
@@ -57,7 +80,7 @@ async function main(): Promise<void> {
     onState: (devices) => broadcastState?.(devices),
     onConnection: (state) => broadcastConnection?.(state),
   });
-  const hub = new WebSocketHub(db, SESSION_SECRET, engine);
+  const hub = new WebSocketHub(db, sessionSecret, engine);
   broadcastState = (devices) => hub.broadcast({ type: "state", devices });
   broadcastConnection = (state) => hub.broadcast({ type: "connection", state });
 
@@ -67,10 +90,30 @@ async function main(): Promise<void> {
 
   app.use("*", async (c, next) => {
     c.set("db", db);
-    c.set("sessionSecret", SESSION_SECRET);
+    c.set("sessionSecret", sessionSecret);
     c.set("pollEngine", engine);
+    c.set("correlationId", correlationIdFrom(c.req.header("x-correlation-id")));
     return next();
   });
+
+  app.use("*", async (c, next) => {
+    const started = Date.now();
+    await next();
+    c.header("x-correlation-id", c.get("correlationId"));
+    c.header("x-content-type-options", "nosniff");
+    c.header("referrer-policy", "no-referrer");
+    c.header("x-frame-options", "DENY");
+    if (c.req.path !== "/api/v1/health") {
+      log("info", "request", {
+        correlationId: c.get("correlationId"),
+        method: c.req.method,
+        path: c.req.path,
+        status: c.res.status,
+        durationMs: Date.now() - started,
+      });
+    }
+  });
+
   app.use("*", loadSession);
 
   app.route("/api/v1/health", healthRoutes);
@@ -83,8 +126,8 @@ async function main(): Promise<void> {
     const path = c.req.path;
     if (path.startsWith("/api")) return c.json({ error: "not_found" }, 404);
     if (existsSync(DIST_DIR)) {
-      const candidate = join(DIST_DIR, path === "/" ? "index.html" : path.slice(1));
-      if (existsSync(candidate)) {
+      const candidate = distFile(path);
+      if (candidate !== null && existsSync(candidate)) {
         return staticResponse(candidate);
       }
     }
@@ -111,12 +154,12 @@ async function main(): Promise<void> {
     websocket: hub.handler(),
   });
 
-  console.log(`FlowHub listening on http://localhost:${PORT}`);
+  log("info", "started", { port: PORT, converter: `${config.converter.host}:${config.converter.port}` });
 
   const signals: NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
   for (const signal of signals) {
     process.on(signal, () => {
-      console.log(`Received ${signal}, shutting down...`);
+      log("info", "shutdown", { signal });
       engine.stop();
       db.close();
       server.stop();
@@ -126,6 +169,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error("Failed to start FlowHub:", error instanceof Error ? error.message : String(error));
+  log("error", "startup_failed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
   process.exit(1);
 });

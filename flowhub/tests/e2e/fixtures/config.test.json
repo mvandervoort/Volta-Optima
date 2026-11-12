@@ -1,0 +1,20 @@
+{
+  "converter": {
+    "host": "127.0.0.1",
+    "port": 1188,
+    "baudRate": 9600,
+    "dataBits": 8,
+    "parity": "even",
+    "stopBits": 1
+  },
+  "bus": {
+    "pollIntervalMs": 500,
+    "devices": [
+      {
+        "id": "e2e-device",
+        "initialName": "MFC-E2E",
+        "address": "01"
+      }
+    ]
+  }
+}

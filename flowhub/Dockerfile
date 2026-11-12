@@ -8,6 +8,7 @@ RUN bun run build
 FROM oven/bun:1
 WORKDIR /app
 ENV NODE_ENV=production \
+    HOME=/tmp \
     FLOWHUB_PORT=8080 \
     FLOWHUB_CONFIG=/etc/flowhub/config.json \
     FLOWHUB_DATA_DIR=/data
