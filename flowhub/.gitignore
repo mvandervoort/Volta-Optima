@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+backups
+.env
+*.db
+*.db-wal
+*.db-shm
+playwright-report
+test-results
+docs/541-C-053-AAA.pdf
